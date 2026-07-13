@@ -4,23 +4,24 @@ probe.py — health check, scaffolder & installer for the Agent Evaluation Layer
 
 Dependency-free (Python 3 standard library only).
 
-Primary (manual) model:
+The layer is manual and maintains ONE file, .agent-eval/EVALUATION_LOG.md. It is
+not a rules file and never edits the project's own docs or installs hooks.
+
+Manual model:
     python probe.py --install-command                 # install the /eval command (global)
     python probe.py --install-command --scope project --dir /path/to/project
     #   then, in Claude Code, just type `/eval` — first run bootstraps the
-    #   project's .agent-eval/, later runs record a fix/enhancement/rule.
+    #   project's .agent-eval/EVALUATION_LOG.md, later runs append an entry.
 
 Other modes:
     python probe.py --dir /path/to/project            # health report
-    python probe.py --init --dir /path/to/project     # scaffold .agent-eval/ files only
-    python probe.py --automate --dir /path/to/project # OPTIONAL: add CLAUDE.md pointer + hooks
-    python probe.py --disable --dir /path/to/project  # remove CLAUDE.md pointer + hooks
-    python probe.py --dir /path/to/project --json      # machine-readable report
-    python probe.py --dir /path/to/project --strict    # warnings -> non-zero exit
+    python probe.py --init --dir /path/to/project     # scaffold the log file only
+    python probe.py --dir /path/to/project --json     # machine-readable report
+    python probe.py --dir /path/to/project --strict   # warnings -> non-zero exit
 
 Exit codes:
     0  healthy / action ok
-    1  not initialized, or missing required files/sections (hard failure)
+    1  not initialized, or missing required file/sections (hard failure)
     2  healthy structure but warnings present, and --strict was set
 """
 
@@ -32,21 +33,11 @@ import sys
 from datetime import date, datetime
 
 EVAL_DIR = ".agent-eval"
-SPEC_FILE = "SPEC.md"
 LOG_FILE = "EVALUATION_LOG.md"
-CLAUDE_SNIPPET_MARKER = "<!-- agent-evaluation-layer:start -->"
-CLAUDE_SNIPPET_END = "<!-- agent-evaluation-layer:end -->"
 
-SPEC_REQUIRED = [
-    ("Purpose", r"^#+\s*.*purpose"),
-    ("Source of Truth", r"^#+\s*.*source of truth"),
-    ("Rules", r"^#+\s*.*rules"),
-    ("Self-Review Rubric", r"^#+\s*.*self[- ]?review rubric"),
-    ("Version History", r"^#+\s*.*version history"),
-]
 LOG_REQUIRED = [
-    ("How to use", r"^#+\s*.*how .*use this file"),
-    ("Rules Changelog", r"^#+\s*.*rules changelog"),
+    ("How to use", r"^#+\s*.*how to use this file"),
+    ("Decisions & Rules History", r"^#+\s*.*decisions.*history"),
     ("Open Improvement Backlog", r"^#+\s*.*open improvement backlog"),
     ("Iteration Log", r"^#+\s*.*iteration log"),
 ]
@@ -55,7 +46,6 @@ ENTRY_RE = re.compile(r"^###\s+Entry\s+(\d+)\s+—\s+(\d{4}-\d{2}-\d{2})", re.M 
 ENTRY_RE_LOOSE = re.compile(r"^###\s+Entry\s+(\d+)\b", re.M | re.I)
 OPEN_BACKLOG_RE = re.compile(r"^\s*[-*]\s*\[\s*\]\s+", re.M)
 DONE_BACKLOG_RE = re.compile(r"^\s*[-*]\s*\[[xX]\]\s+", re.M)
-SPEC_VERSION_ROW_RE = re.compile(r"^\|\s*([0-9][^|]*?)\s*\|\s*(\d{4}-\d{2}-\d{2})\s*\|", re.M)
 
 
 def find_layer(start):
@@ -108,23 +98,16 @@ def probe(project_dir):
     report["eval_dir"] = eval_dir
     report["initialized"] = True
 
-    spec_path = os.path.join(eval_dir, SPEC_FILE)
     log_path = os.path.join(eval_dir, LOG_FILE)
 
-    if not os.path.isfile(spec_path):
-        report["errors"].append(f"Missing {EVAL_DIR}/{SPEC_FILE}")
     if not os.path.isfile(log_path):
         report["errors"].append(f"Missing {EVAL_DIR}/{LOG_FILE}")
     if report["errors"]:
         return report
 
-    spec = read(spec_path)
     log = read(log_path)
 
-    _, spec_missing = check_sections(spec, SPEC_REQUIRED)
     _, log_missing = check_sections(log, LOG_REQUIRED)
-    for m in spec_missing:
-        report["errors"].append(f"{SPEC_FILE} is missing required section: {m}")
     for m in log_missing:
         report["errors"].append(f"{LOG_FILE} is missing required section: {m}")
 
@@ -158,27 +141,11 @@ def probe(project_dir):
     report["info"]["backlog_open"] = len(OPEN_BACKLOG_RE.findall(log))
     report["info"]["backlog_resolved"] = len(DONE_BACKLOG_RE.findall(log))
 
-    version_rows = SPEC_VERSION_ROW_RE.findall(spec)
-    if version_rows:
-        latest_version = version_rows[-1][0].strip()
-        latest_v_date = version_rows[-1][1].strip()
-        report["info"]["spec_latest_version"] = latest_version
-        report["info"]["spec_latest_version_date"] = latest_v_date
-        changelog_idx = re.search(r"rules changelog", log, re.I)
-        changelog_text = log[changelog_idx.start():] if changelog_idx else log
-        if latest_v_date not in changelog_text:
-            report["warnings"].append(
-                f"Spec's latest version ({latest_version}, {latest_v_date}) is not referenced "
-                f"in the Log's Rules Changelog — Spec and Changelog may have drifted."
-            )
-    else:
-        report["warnings"].append(f"No Version History rows parsed in {SPEC_FILE}.")
-
-    placeholders = len(re.findall(r"<[^>\n]{1,60}>", spec)) + len(re.findall(r"<[^>\n]{1,60}>", log))
+    placeholders = len(re.findall(r"<[^>\n]{1,60}>", log))
     if placeholders:
         report["warnings"].append(
-            f"{placeholders} unfilled '<placeholder>' token(s) remain in the Spec/Log — "
-            f"the layer looks freshly scaffolded and not yet filled in."
+            f"{placeholders} unfilled '<placeholder>' token(s) remain in the log — "
+            f"it looks freshly scaffolded and not yet filled in."
         )
 
     return report
@@ -216,193 +183,36 @@ def install_command(project_dir, scope="global"):
         fh.write(read(src))
     print(f"  command: {'updated' if existed else 'installed'} /eval -> {dest}  (scope: {scope})")
     print("  usage: type `/eval` in Claude Code — first run bootstraps this project's")
-    print("         .agent-eval/; later runs: `/eval <what to record>`.")
+    print("         .agent-eval/EVALUATION_LOG.md; later runs: `/eval <what to record>`.")
     return 0
 
 
 # ---------------- scaffold ----------------
 
 def do_init(project_dir):
-    """Create <project_dir>/.agent-eval/ memory files from templates (no overwrite). Files only."""
+    """Create <project_dir>/.agent-eval/EVALUATION_LOG.md from the template (no overwrite)."""
     templates_dir = _templates_dir()
-    src = {
-        SPEC_FILE: os.path.join(templates_dir, "SPEC.template.md"),
-        LOG_FILE: os.path.join(templates_dir, "EVALUATION_LOG.template.md"),
-    }
-    for label, path in src.items():
-        if not os.path.isfile(path):
-            print(f"ERROR: template not found: {path}", file=sys.stderr)
-            return 1
+    src_path = os.path.join(templates_dir, "EVALUATION_LOG.template.md")
+    if not os.path.isfile(src_path):
+        print(f"ERROR: template not found: {src_path}", file=sys.stderr)
+        return 1
 
     eval_dir = os.path.join(os.path.abspath(project_dir), EVAL_DIR)
     os.makedirs(eval_dir, exist_ok=True)
-    created, skipped = [], []
-    for dest_name, path in src.items():
-        dest = os.path.join(eval_dir, dest_name)
-        if os.path.exists(dest):
-            skipped.append(dest_name)
-            continue
-        with open(dest, "w", encoding="utf-8") as fh:
-            fh.write(read(path))
-        created.append(dest_name)
+    dest = os.path.join(eval_dir, LOG_FILE)
+    if os.path.exists(dest):
+        print(f"Init target: {eval_dir}")
+        print(f"  skipped (already present): {LOG_FILE}")
+        return 0
+    with open(dest, "w", encoding="utf-8") as fh:
+        fh.write(read(src_path))
 
     print(f"Init target: {eval_dir}")
-    if created:
-        print("  created: " + ", ".join(created))
-    if skipped:
-        print("  skipped (already present): " + ", ".join(skipped))
+    print(f"  created: {LOG_FILE}")
     print(
-        "\nNext: fill in the Spec (or just run `/eval` and let it seed the Spec from\n"
-        "your repo), then commit .agent-eval/."
+        "\nNext: fill in the log's Purpose line (or just run `/eval` and let it seed\n"
+        "it from your repo), then commit .agent-eval/."
     )
-    return 0
-
-
-# ---------------- OPTIONAL: automatic mode (CLAUDE.md pointer + hooks) ----------------
-
-def append_claude_md(project_dir):
-    snippet_path = os.path.join(_templates_dir(), "CLAUDE.snippet.md")
-    if not os.path.isfile(snippet_path):
-        print(f"  CLAUDE.md: snippet template not found ({snippet_path}) — skipped", file=sys.stderr)
-        return
-    snippet = read(snippet_path).strip()
-    claude_path = os.path.join(os.path.abspath(project_dir), "CLAUDE.md")
-    existing = read(claude_path) if os.path.isfile(claude_path) else ""
-    if CLAUDE_SNIPPET_MARKER in existing:
-        print("  CLAUDE.md: pointer already present — skipped")
-        return
-    if existing == "" or existing.endswith("\n\n"):
-        sep = ""
-    elif existing.endswith("\n"):
-        sep = "\n"
-    else:
-        sep = "\n\n"
-    with open(claude_path, "a", encoding="utf-8") as fh:
-        fh.write(sep + snippet + "\n")
-    print(f"  CLAUDE.md: {'created' if not existing else 'appended pointer to'} {claude_path}")
-
-
-def install_hooks(project_dir):
-    hook_script = os.path.join(_skill_dir(), "hooks", "agent_eval_hooks.py")
-    if not os.path.isfile(hook_script):
-        print(f"ERROR: hook script not found: {hook_script}", file=sys.stderr)
-        return 1
-    python = sys.executable or "python3"
-    settings_dir = os.path.join(os.path.abspath(project_dir), ".claude")
-    os.makedirs(settings_dir, exist_ok=True)
-    settings_path = os.path.join(settings_dir, "settings.json")
-
-    settings = {}
-    if os.path.isfile(settings_path):
-        try:
-            settings = json.loads(read(settings_path))
-        except Exception as e:
-            print(f"ERROR: could not parse {settings_path}: {e}", file=sys.stderr)
-            return 1
-    hooks = settings.setdefault("hooks", {})
-
-    events = {"SessionStart": "session-start", "Stop": "stop"}
-    changed = False
-    for event, mode in events.items():
-        groups = hooks.setdefault(event, [])
-        already = any(
-            any(
-                h.get("type") == "command"
-                and isinstance(h.get("args"), list)
-                and hook_script in h.get("args", [])
-                and mode in h.get("args", [])
-                for h in g.get("hooks", [])
-            )
-            for g in groups if isinstance(g, dict)
-        )
-        if already:
-            continue
-        groups.append({
-            "hooks": [{
-                "type": "command",
-                "command": python,
-                "args": [hook_script, "--event", mode],
-            }]
-        })
-        changed = True
-
-    if changed:
-        with open(settings_path, "w", encoding="utf-8") as fh:
-            json.dump(settings, fh, indent=2)
-            fh.write("\n")
-        print(f"  hooks: installed SessionStart + Stop -> {settings_path}")
-        print(f"         interpreter: {python}")
-        print(f"         handler    : {hook_script}")
-    else:
-        print(f"  hooks: already installed in {settings_path} — skipped")
-    return 0
-
-
-def automate(project_dir):
-    print("Enabling OPTIONAL automatic mode (CLAUDE.md pointer + hooks):")
-    append_claude_md(project_dir)
-    return install_hooks(project_dir)
-
-
-def disable_automation(project_dir):
-    """Remove the CLAUDE.md pointer block and the layer's hooks. Leaves .agent-eval/ intact."""
-    root = os.path.abspath(project_dir)
-    changed = False
-
-    claude_path = os.path.join(root, "CLAUDE.md")
-    if os.path.isfile(claude_path):
-        text = read(claude_path)
-        if CLAUDE_SNIPPET_MARKER in text and CLAUDE_SNIPPET_END in text:
-            i = text.index(CLAUDE_SNIPPET_MARKER)
-            j = text.index(CLAUDE_SNIPPET_END) + len(CLAUDE_SNIPPET_END)
-            new = text[:i] + text[j:]
-            new = re.sub(r"\n{3,}", "\n\n", new).strip()
-            new = (new + "\n") if new else ""
-            with open(claude_path, "w", encoding="utf-8") as fh:
-                fh.write(new)
-            print("  CLAUDE.md: removed evaluation-layer pointer")
-            changed = True
-
-    settings_path = os.path.join(root, ".claude", "settings.json")
-    if os.path.isfile(settings_path):
-        try:
-            settings = json.loads(read(settings_path))
-        except Exception as e:
-            print(f"ERROR: could not parse {settings_path}: {e}", file=sys.stderr)
-            settings = None
-        if isinstance(settings, dict) and isinstance(settings.get("hooks"), dict):
-            removed = False
-            for event in ("SessionStart", "Stop"):
-                groups = settings["hooks"].get(event)
-                if not isinstance(groups, list):
-                    continue
-                kept = []
-                for g in groups:
-                    hs = g.get("hooks", []) if isinstance(g, dict) else []
-                    refs = any(
-                        isinstance(arg, str) and "agent_eval_hooks.py" in arg
-                        for h in hs for arg in h.get("args", [])
-                    )
-                    if refs:
-                        removed = True
-                    else:
-                        kept.append(g)
-                if kept:
-                    settings["hooks"][event] = kept
-                else:
-                    settings["hooks"].pop(event, None)
-            if not settings["hooks"]:
-                settings.pop("hooks", None)
-            if removed:
-                with open(settings_path, "w", encoding="utf-8") as fh:
-                    json.dump(settings, fh, indent=2)
-                    fh.write("\n")
-                print(f"  hooks: removed evaluation-layer hooks from {settings_path}")
-                changed = True
-
-    if not changed:
-        print("  nothing to disable (no CLAUDE.md pointer or hooks found).")
-    print("  note: .agent-eval/ memory files are left in place (they cost nothing unless read).")
     return 0
 
 
@@ -422,7 +232,6 @@ def print_report(report):
         for k in [
             "iteration_entries", "highest_entry_number", "last_entry_date",
             "days_since_last_entry", "backlog_open", "backlog_resolved",
-            "spec_latest_version", "spec_latest_version_date",
         ]:
             if k in info:
                 print(f"{k:24}: {info[k]}")
@@ -451,15 +260,10 @@ def main(argv=None):
     ap.add_argument("--dir", default=".", help="project directory (default: current dir)")
     ap.add_argument("--install-command", action="store_true", help="install the /eval slash command (primary, manual model)")
     ap.add_argument("--scope", choices=["global", "project"], default="global", help="where to install /eval (default: global)")
-    ap.add_argument("--init", action="store_true", help="scaffold .agent-eval/ memory files only (no CLAUDE.md, no hooks)")
-    ap.add_argument("--automate", action="store_true", help="OPTIONAL: enable automatic mode (CLAUDE.md pointer + SessionStart/Stop hooks)")
-    ap.add_argument("--disable", action="store_true", help="remove the CLAUDE.md pointer + hooks (leaves .agent-eval/ intact)")
+    ap.add_argument("--init", action="store_true", help="scaffold .agent-eval/EVALUATION_LOG.md only")
     ap.add_argument("--json", action="store_true", help="print the report as JSON")
     ap.add_argument("--strict", action="store_true", help="treat warnings as a non-zero (2) exit")
     args = ap.parse_args(argv)
-
-    if args.disable:
-        return disable_automation(args.dir)
 
     did_action = False
     if args.install_command:
@@ -469,11 +273,6 @@ def main(argv=None):
         did_action = True
     if args.init:
         rc = do_init(args.dir)
-        if rc != 0:
-            return rc
-        did_action = True
-    if args.automate:
-        rc = automate(args.dir)
         if rc != 0:
             return rc
         did_action = True

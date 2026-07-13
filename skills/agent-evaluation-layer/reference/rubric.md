@@ -1,18 +1,20 @@
 # Self-Review Rubric — reference menu
 
-The Spec's Section 4 rubric should be **short and real** — six-ish checks you
-actually run every iteration. This file is the menu to build that list from and
-to grow it as the project matures. Copy the relevant items into the project's
-`SPEC.md`; don't dump the whole menu in.
+An **optional lens** the `/eval` run can apply to the recent work to surface issues
+worth logging. It is a menu to pick from — **not** a stored quality gate and not a
+rules file. Nothing here is persisted into the project; the project's own docs
+(e.g. `CLAUDE.md`) remain the source of truth for actual standards. Use a handful
+of the checks below at eval time, and log any real miss as a defect in the
+iteration entry.
 
 ## Always-on core (start here)
 
-- **Fidelity** — output grounded in the Source of Truth; nothing fabricated or invented.
-- **Rule compliance** — every rule in Spec Section 3 was followed, checked by number.
+- **Fidelity** — output grounded in reality (the code/tests/data); nothing fabricated or invented.
+- **Consistency with project rules** — the work matches the project's own docs (e.g. `CLAUDE.md`, README, ADRs).
 - **Correctness** — does what was asked; obvious failure modes and edge cases checked.
 - **Maintainability** — a future agent can read, understand, and extend it without tribal knowledge.
-- **Human read** — natural and fit-for-user, not gamed to satisfy the rubric literally.
-- **Memory hygiene** — this iteration is logged, backlog updated, Spec/Changelog in sync.
+- **Human read** — natural and fit-for-user, not gamed to satisfy a check literally.
+- **Memory hygiene** — this iteration is logged and the backlog is updated.
 
 ## Engineering / production-grade (pull in as the system scales)
 
@@ -38,12 +40,12 @@ to grow it as the project matures. Copy the relevant items into the project's
 
 ## How to use this menu
 
-1. **Bootstrap:** take the *core* list plus 1–3 items from the domain sections
-   that match the project's stack today. Keep it small.
-2. **On each defect:** if a rubric miss keeps recurring, promote the specific
-   check into the Spec rubric (and log why in the Evaluation Log).
-3. **On each maturity step:** as the project heads toward production, pull more
-   items from the engineering section into the active rubric.
+1. **Per iteration:** run the *core* list plus 1–3 items from the domain sections
+   that match the project's stack today. Keep it light — this is a lens for finding
+   things worth logging, not a gate to pass.
+2. **On a recurring miss:** if the same check keeps failing, that's a durable
+   lesson — write the rule into the project's own docs (e.g. `CLAUDE.md`) and leave
+   a dated pointer under the log's Decisions & Rules History.
 
-A rubric item earns its place only if you'll actually run it. A long rubric that
-gets skipped is worse than a short one that's honored every time.
+A check earns its place only if you'll actually run it. A long rubric that gets
+skipped is worse than a short one that's honored every time.
