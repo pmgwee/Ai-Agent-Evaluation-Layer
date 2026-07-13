@@ -1,19 +1,15 @@
 #!/usr/bin/env python3
 """
-probe.py — health check, scaffolder & installer for the Agent Evaluation Layer.
+probe.py — scaffolder & health check for the Agent Evaluation Layer.
 
-Dependency-free (Python 3 standard library only).
+Dependency-free (Python 3 standard library only). Installs nothing: the skill is
+invoked by typing `/agent-evaluation-layer` (its folder name in .claude/skills/), so there is no
+command file to install. This script only scaffolds or inspects a project's log.
 
 The layer is manual and maintains ONE file, .agent-eval/EVALUATION_LOG.md. It is
 not a rules file and never edits the project's own docs or installs hooks.
 
-Manual model:
-    python probe.py --install-command                 # install the /eval command (global)
-    python probe.py --install-command --scope project --dir /path/to/project
-    #   then, in Claude Code, just type `/eval` — first run bootstraps the
-    #   project's .agent-eval/EVALUATION_LOG.md, later runs append an entry.
-
-Other modes:
+Modes:
     python probe.py --dir /path/to/project            # health report
     python probe.py --init --dir /path/to/project     # scaffold the log file only
     python probe.py --dir /path/to/project --json     # machine-readable report
@@ -89,7 +85,7 @@ def probe(project_dir):
     if root is None:
         report["errors"].append(
             f"No {EVAL_DIR}/ found in {os.path.abspath(project_dir)} or any parent. "
-            f"Run `/eval` in Claude Code (or `probe.py --init`) to create one."
+            f"Run `/agent-evaluation-layer` in Claude Code (or `probe.py --init`) to create one."
         )
         return report
 
@@ -161,32 +157,6 @@ def _templates_dir():
     return os.path.join(_skill_dir(), "templates")
 
 
-def _commands_target(project_dir, scope):
-    if scope == "global":
-        return os.path.join(os.path.expanduser("~"), ".claude", "commands")
-    return os.path.join(os.path.abspath(project_dir), ".claude", "commands")
-
-
-# ---------------- primary: manual command install ----------------
-
-def install_command(project_dir, scope="global"):
-    """Install the /eval slash command (global by default, or project-scoped)."""
-    src = os.path.join(_skill_dir(), "commands", "eval.md")
-    if not os.path.isfile(src):
-        print(f"ERROR: command template not found: {src}", file=sys.stderr)
-        return 1
-    dest_dir = _commands_target(project_dir, scope)
-    os.makedirs(dest_dir, exist_ok=True)
-    dest = os.path.join(dest_dir, "eval.md")
-    existed = os.path.isfile(dest)
-    with open(dest, "w", encoding="utf-8") as fh:
-        fh.write(read(src))
-    print(f"  command: {'updated' if existed else 'installed'} /eval -> {dest}  (scope: {scope})")
-    print("  usage: type `/eval` in Claude Code — first run bootstraps this project's")
-    print("         .agent-eval/EVALUATION_LOG.md; later runs: `/eval <what to record>`.")
-    return 0
-
-
 # ---------------- scaffold ----------------
 
 def do_init(project_dir):
@@ -210,7 +180,7 @@ def do_init(project_dir):
     print(f"Init target: {eval_dir}")
     print(f"  created: {LOG_FILE}")
     print(
-        "\nNext: fill in the log's Purpose line (or just run `/eval` and let it seed\n"
+        "\nNext: fill in the log's Purpose line (or just run `/agent-evaluation-layer` and let it seed\n"
         "it from your repo), then commit .agent-eval/."
     )
     return 0
@@ -256,37 +226,26 @@ def print_report(report):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="Health check / installer for the Agent Evaluation Layer.")
+    ap = argparse.ArgumentParser(description="Scaffolder / health check for the Agent Evaluation Layer.")
     ap.add_argument("--dir", default=".", help="project directory (default: current dir)")
-    ap.add_argument("--install-command", action="store_true", help="install the /eval slash command (primary, manual model)")
-    ap.add_argument("--scope", choices=["global", "project"], default="global", help="where to install /eval (default: global)")
     ap.add_argument("--init", action="store_true", help="scaffold .agent-eval/EVALUATION_LOG.md only")
     ap.add_argument("--json", action="store_true", help="print the report as JSON")
     ap.add_argument("--strict", action="store_true", help="treat warnings as a non-zero (2) exit")
     args = ap.parse_args(argv)
 
     did_action = False
-    if args.install_command:
-        rc = install_command(args.dir, args.scope)
-        if rc != 0:
-            return rc
-        did_action = True
     if args.init:
         rc = do_init(args.dir)
         if rc != 0:
             return rc
         did_action = True
 
-    # Report (always, unless we only installed the global command with no local layer).
     report = probe(args.dir)
     if args.json:
         print(json.dumps(report, indent=2))
-    elif not (did_action and not report["initialized"]):
+    else:
         print_report(report)
 
-    if report["errors"] and did_action and not report["initialized"]:
-        # Installing the global command without a local layer is fine — not an error state.
-        return 0
     if report["errors"]:
         return 1
     if report["warnings"] and args.strict:

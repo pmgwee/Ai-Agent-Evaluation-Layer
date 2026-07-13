@@ -5,7 +5,7 @@
 A universal **Claude skill** that adds a durable, append-only *iteration history*
 to any agent-built project — the record of **why** it changed: defects, root
 causes, lessons, decisions, and real user feedback. You trigger it **manually**
-with the **`/eval`** command whenever you want to record something, and it writes
+with the **`/agent-evaluation-layer`** command whenever you want to record something, and it writes
 that into one committed file that survives across sessions **and across different
 AI agents**. It does **not** run in the background.
 
@@ -18,11 +18,11 @@ does can affect your coding agent's behavior.
 
 ## How it works
 
-You run `/eval` at the moments you choose:
+You run `/agent-evaluation-layer` at the moments you choose:
 
 - **First run in a project** → it sets up the layer (creates
   `.agent-eval/EVALUATION_LOG.md`).
-- **Later runs** → `/eval fixed the rate-limit retry bug`, `/eval v2: added Stripe
+- **Later runs** → `/agent-evaluation-layer fixed the rate-limit retry bug`, `/agent-evaluation-layer v2: added Stripe
   checkout` → it appends a dated entry and commits.
 
 Between runs, nothing happens and no tokens are spent.
@@ -37,7 +37,7 @@ Between runs, nothing happens and no tokens are spent.
   *pointer* and asks you to write the rule into your own docs — it never writes
   there itself.
 - **No hooks, no session automation.** It injects nothing into sessions, blocks no
-  turns, changes no agent behavior. `/eval` writes only
+  turns, changes no agent behavior. `/agent-evaluation-layer` writes only
   `.agent-eval/EVALUATION_LOG.md`.
 
 ---
@@ -59,11 +59,11 @@ the log only helps when you manually look back or manually point an agent at it.
 
 ---
 
-## When to run `/eval` — a practical guide
+## When to run `/agent-evaluation-layer` — a practical guide
 
 ### 1. Log everything meaningful; keep current rules in your own docs
 
-Every `/eval` run appends an entry to `EVALUATION_LOG.md`. Whether a lesson *also*
+Every `/agent-evaluation-layer` run appends an entry to `EVALUATION_LOG.md`. Whether a lesson *also*
 earns a durable **rule** comes down to one test the agent applies each time: **is
 this durable** — will it recur elsewhere, does it have a non-obvious root cause,
 would skipping it let the same defect happen again? If yes, you record the rule in
@@ -82,7 +82,7 @@ ICU bug is exactly the kind of small-diff, high-durability lesson worth a rule);
 You don't need to stop and decide, the moment you fix something small, whether
 it's "worth" logging. Let changes accumulate. At a natural checkpoint — before
 switching sessions, or when a phase is genuinely implemented **and tested and
-confirmed done** — run `/eval` once with no argument. It scans `git log` /
+confirmed done** — run `/agent-evaluation-layer` once with no argument. It scans `git log` /
 `git diff` since the last entry and surfaces everything that happened since; the
 what-to-log judgment happens *then*, not while you're heads-down coding.
 
@@ -91,7 +91,7 @@ what-to-log judgment happens *then*, not while you're heads-down coding.
 When a checkpoint sweeps up several independent, reproducible lessons, don't
 compress them into a single entry. If you fixed two unrelated defects in the same
 session and each teaches a distinct lesson, record **two** separate Iteration Log
-entries (run `/eval` twice, or ask for two entries in one pass) — not one entry
+entries (run `/agent-evaluation-layer` twice, or ask for two entries in one pass) — not one entry
 that mixes both. A merged entry is much harder to find later by date, keyword, or
 tag.
 
@@ -132,17 +132,19 @@ Help me install the agent-evaluation-layer skill:
 https://raw.githubusercontent.com/pmgwee/Ai-Agent-Evaluation-Layer/main/docs/install.md
 ```
 
-`docs/install.md` is written for the agent to read: it copies the skill into
-`.claude/skills/`, installs the `/eval` command, and tells you how to use it.
+`docs/install.md` is written for the agent to read: it copies the skill folder
+into `.claude/skills/agent-evaluation-layer/` and tells you how to use it. Nothing else is added.
 
 ### Option B — manual
 
+Installing is just copying one folder. The skill is invoked by its **folder name**
+(`agent-evaluation-layer`), so there is **no command file and nothing goes into
+`.claude/commands/`**.
+
 ```bash
 git clone https://github.com/pmgwee/Ai-Agent-Evaluation-Layer.git
-# 1) copy the skill (global = all projects on this machine)
+# copy the skill folder into place (global = all projects on this machine)
 cp -R Ai-Agent-Evaluation-Layer/skills/agent-evaluation-layer ~/.claude/skills/
-# 2) install the /eval command (global)
-python3 ~/.claude/skills/agent-evaluation-layer/scripts/probe.py --install-command
 ```
 
 Windows PowerShell:
@@ -150,10 +152,10 @@ Windows PowerShell:
 ```powershell
 New-Item -ItemType Directory -Force -Path "$HOME\.claude\skills" | Out-Null
 Copy-Item -Recurse -Force ".\Ai-Agent-Evaluation-Layer\skills\agent-evaluation-layer" "$HOME\.claude\skills\"
-python "$HOME\.claude\skills\agent-evaluation-layer\scripts\probe.py" --install-command
 ```
 
-Then, in any project, just type **`/eval`**. That's it.
+Then, in any project, just type **`/agent-evaluation-layer`**. That's it. (For one repo only, copy
+into `<project>/.claude/skills/agent-evaluation-layer/` instead.)
 
 ---
 
@@ -179,16 +181,14 @@ Ai-Agent-Evaluation-Layer/
 ├── docs/
 │   └── install.md                           # agent-readable install manual (bilingual)
 └── skills/
-    └── agent-evaluation-layer/
+    └── agent-evaluation-layer/               # drop into .claude/skills/; invoke as /agent-evaluation-layer
         ├── SKILL.md                          # the method (manual; one file, no rules file, no hooks)
-        ├── commands/
-        │   └── eval.md                       # the /eval slash command (manual trigger)
         ├── templates/
         │   └── EVALUATION_LOG.template.md    # starting point for a project's log
         ├── reference/
         │   └── rubric.md                     # optional eval-time review lens
         └── scripts/
-            └── probe.py                      # installer / scaffolder / health check
+            └── probe.py                      # scaffolder / health check (installs nothing)
 ```
 
 ---

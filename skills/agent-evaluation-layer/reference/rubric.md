@@ -1,6 +1,6 @@
 # Self-Review Rubric — reference menu
 
-An **optional lens** the `/eval` run can apply to the recent work to surface issues
+An **optional lens** the `/agent-evaluation-layer` run can apply to the recent work to surface issues
 worth logging. It is a menu to pick from — **not** a stored quality gate and not a
 rules file. Nothing here is persisted into the project; the project's own docs
 (e.g. `CLAUDE.md`) remain the source of truth for actual standards. Use a handful

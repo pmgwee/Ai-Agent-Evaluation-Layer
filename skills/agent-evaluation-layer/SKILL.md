@@ -2,7 +2,7 @@
 name: agent-evaluation-layer
 description: >-
   Universal, append-only iteration-history memory for any agent-built project,
-  driven manually by the `/eval` command. Use it when the user wants to record
+  invoked manually by the user as `/agent-evaluation-layer`. Use it when the user wants to record
   WHY the project changed — a bug fix's root cause, a version's lesson, a decision
   and its rationale, or real user feedback — into a durable, dated log that
   survives across sessions and across different AI agents. For example "record
@@ -27,10 +27,20 @@ Log**. It answers **"what broke, why, what did we learn, what's next?"** — the
 dated history that a project's snapshot docs (README, `CLAUDE.md`, ADRs)
 deliberately don't keep.
 
-> **This skill is manual.** It is marked `disable-model-invocation: true`, so it
-> never runs on its own and never spends tokens in the background. It runs only
-> when the user invokes the **`/eval`** command (or when an agent is explicitly
-> told to follow it).
+> **This skill is manual.** It is marked `disable-model-invocation: true`, so the
+> model never auto-invokes it — it never runs on its own and never spends tokens
+> in the background. It runs only when **you** invoke it by typing **`/agent-evaluation-layer`** (the
+> skill's name), or when an agent is explicitly told to follow it. Keep that flag:
+> it is the guard that keeps the skill manual — removing it would let the model
+> start the skill on its own.
+
+## Install & invoke
+
+Drop this `agent-evaluation-layer/` folder into `.claude/skills/` (global
+`~/.claude/skills/agent-evaluation-layer/` for every project, or
+`<project>/.claude/skills/agent-evaluation-layer/` for one repo). Then type
+**`/agent-evaluation-layer`** — the skill is invoked by its folder name, so there
+is **no separate command file and nothing is added to `.claude/commands/`**.
 
 ---
 
@@ -46,7 +56,7 @@ or the project's own configuration. By design it:
   emerges, the layer records a dated *pointer* in its log and asks the user to
   write the rule into their own docs — it never writes there itself.
 - **Does not install hooks, settings, or session automation.** It injects nothing
-  into sessions, blocks no turns, and changes no agent behavior. Running `/eval`
+  into sessions, blocks no turns, and changes no agent behavior. Running `/agent-evaluation-layer`
   writes only `.agent-eval/EVALUATION_LOG.md`.
 
 This is what keeps the layer safe to add to any repo — including one already
@@ -72,7 +82,7 @@ Log** (dated, numbered entries).
 
 ---
 
-## The method (what `/eval` does each run)
+## The method (what `/agent-evaluation-layer` does each run)
 
 ### 1. Locate or bootstrap
 - If `.agent-eval/EVALUATION_LOG.md` doesn't exist → **bootstrap** (see below),
@@ -158,31 +168,28 @@ tweak with no root cause) can stay in the commit message and skip the log.
 
 ## CLI (`scripts/probe.py`)
 
-Dependency-free (Python 3 standard library only).
+Dependency-free (Python 3 standard library only). Optional — `/agent-evaluation-layer` does the
+scaffolding itself; this is just for health checks / CI.
 
 ```bash
-# PRIMARY: install the /eval command (once; global = every project on this machine)
-python scripts/probe.py --install-command                       # global
-python scripts/probe.py --install-command --scope project --dir /path/to/project
-
 # Health report on a project's layer
 python scripts/probe.py --dir /path/to/project
 python scripts/probe.py --dir /path/to/project --json           # machine-readable
 python scripts/probe.py --dir /path/to/project --strict         # warnings -> exit 2
 
-# Scaffold .agent-eval/EVALUATION_LOG.md only (usually /eval does this for you)
+# Scaffold .agent-eval/EVALUATION_LOG.md only (usually /agent-evaluation-layer does this for you)
 python scripts/probe.py --init --dir /path/to/project
 ```
 
 The probe verifies the log exists, checks its required sections, counts iteration
 entries, and reports the last entry date and open-backlog count. Exit `0` healthy,
-`1` missing structure, `2` warnings under `--strict`.
+`1` missing structure, `2` warnings under `--strict`. It installs nothing.
 
 ---
 
 ## Files in this skill
 
-- `commands/eval.md` — the `/eval` slash command (the manual trigger).
+- `SKILL.md` — this file: the method. Invoked by typing `/agent-evaluation-layer` (the folder name).
 - `templates/EVALUATION_LOG.template.md` — starting point for a project's `EVALUATION_LOG.md`.
 - `reference/rubric.md` — a domain-agnostic rubric menu, used as an optional eval-time lens.
-- `scripts/probe.py` — installer (`--install-command`), scaffolder (`--init`), and health check.
+- `scripts/probe.py` — scaffolder (`--init`) and health check. Installs nothing.

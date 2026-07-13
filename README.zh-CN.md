@@ -4,7 +4,7 @@
 
 一个通用的 **Claude 技能**，为任何由 AI 构建的项目加上一层持久、只增不改的
 **迭代历史**——记录项目**为什么**会这样改：缺陷、根因、教训、决策，以及真实的用户反馈。
-你用 **`/eval`** 命令**手动**触发它，它就把这些写进一个随仓库提交、能跨会话、
+你用 **`/agent-evaluation-layer`** 命令**手动**触发它，它就把这些写进一个随仓库提交、能跨会话、
 跨不同 AI agent 存续的文件里。它**不会在后台运行**。
 
 它只维护**一个文件**，而且**不是规则文件**：项目**当前的规则**依旧以你项目自己的
@@ -15,10 +15,10 @@
 
 ## 工作方式
 
-你在你选择的时刻运行 `/eval`：
+你在你选择的时刻运行 `/agent-evaluation-layer`：
 
 - **第一次**在某项目运行 → 它会建立评估层（创建 `.agent-eval/EVALUATION_LOG.md`）。
-- **之后每次** → `/eval 修好了限流重试的 bug`、`/eval v2：加了 Stripe 结账` → 它就
+- **之后每次** → `/agent-evaluation-layer 修好了限流重试的 bug`、`/agent-evaluation-layer v2：加了 Stripe 结账` → 它就
   追加一条带日期的记录并提交。
 
 两次运行之间什么都不发生，也不消耗 token。
@@ -32,7 +32,7 @@
 - **绝不改写 `CLAUDE.md`。** 如果出现一条持久规则，日志只记一条带日期的**指针**，
   并提醒你自己把规则写进你的文档——它绝不替你动手写。
 - **不装 hook、不做 session 自动化。** 它不往任何 session 注入内容、不拦截任何 turn、
-  不改变任何 agent 行为。`/eval` 只写 `.agent-eval/EVALUATION_LOG.md` 这一个文件。
+  不改变任何 agent 行为。`/agent-evaluation-layer` 只写 `.agent-eval/EVALUATION_LOG.md` 这一个文件。
 
 ---
 
@@ -51,11 +51,11 @@
 
 ---
 
-## 什么时候该跑 `/eval` —— 实用指南
+## 什么时候该跑 `/agent-evaluation-layer` —— 实用指南
 
 ### 1. 有意义的都记进 Log；当前规则留在你自己的文档里
 
-每次跑 `/eval`，都会往 `EVALUATION_LOG.md` 追加一条记录。至于一个教训要不要**升级
+每次跑 `/agent-evaluation-layer`，都会往 `EVALUATION_LOG.md` 追加一条记录。至于一个教训要不要**升级
 成一条持久规则**，取决于 agent 每次都会套用的同一个判断标准：**这件事有没有持久性**
 ——会不会在别处复发、有没有不显而易见的根因、如果不记下来同样的问题会不会再犯？
 如果是，你就把这条规则写进你项目自己的文档（例如 `CLAUDE.md`），日志里只留一条
@@ -71,7 +71,7 @@
 
 你不需要在修完一个小问题的当下，立刻停下来决定「这值不值得记」。让改动自然
 累积就好。等到一个自然的检查点——要切 session 了，或者一个 phase 真的做完、
-测完、确认完工了——再跑一次不带参数的 `/eval`。它会用 `git log` / `git diff`
+测完、确认完工了——再跑一次不带参数的 `/agent-evaluation-layer`。它会用 `git log` / `git diff`
 扫描上一条记录之后发生的所有事；「记什么」的判断是在**那个时候**才做，而不是要求
 你在埋头写代码的过程中分心去想。
 
@@ -79,11 +79,11 @@
 
 如果一个检查点一次扫出好几件互不相关、各自都有独立教训的事，不要把它们压缩进
 同一条 entry。如果同一个 session 里你修了两个互不相关的缺陷、各自都教会你一件
-不同的事，就应该记成**两条**独立的 Iteration Log entry（跑两次 `/eval`，或者
+不同的事，就应该记成**两条**独立的 Iteration Log entry（跑两次 `/agent-evaluation-layer`，或者
 一次要求拆成两条）——而不是揉成一条。合并起来的 entry，以后靠日期、关键词、
 标签去搜索时会很难精准定位。
 
-### 4. 值得触发一次 `/eval` 的检查点
+### 4. 值得触发一次 `/agent-evaluation-layer` 的检查点
 
 - 要切换到新 session、或要把工作交给别的 agent 之前。
 - 一个 phase **真正实现、测试完、确认完工**之后——不是「代码写完」就算。
@@ -116,17 +116,18 @@ Help me install the agent-evaluation-layer skill:
 https://raw.githubusercontent.com/pmgwee/Ai-Agent-Evaluation-Layer/main/docs/install.md
 ```
 
-`docs/install.md` 是写给 agent 读的：它会把技能复制到 `.claude/skills/`、安装
-`/eval` 命令，并告诉你怎么用。
+`docs/install.md` 是写给 agent 读的：它会把技能文件夹复制到 `.claude/skills/agent-evaluation-layer/`、
+并告诉你怎么用。不会多加任何别的东西。
 
 ### 方案 B：手动安装
 
+安装就是复制一个文件夹。skill 靠**文件夹名**（`agent-evaluation-layer`）触发，所以
+**没有 command 文件、`.claude/commands/` 里什么都不会多**。
+
 ```bash
 git clone https://github.com/pmgwee/Ai-Agent-Evaluation-Layer.git
-# 1) 复制技能（全局 = 这台机器上所有项目都能用）
+# 把 skill 文件夹复制到位（全局 = 这台机器上所有项目都能用）
 cp -R Ai-Agent-Evaluation-Layer/skills/agent-evaluation-layer ~/.claude/skills/
-# 2) 安装 /eval 命令（全局）
-python3 ~/.claude/skills/agent-evaluation-layer/scripts/probe.py --install-command
 ```
 
 Windows PowerShell：
@@ -134,10 +135,10 @@ Windows PowerShell：
 ```powershell
 New-Item -ItemType Directory -Force -Path "$HOME\.claude\skills" | Out-Null
 Copy-Item -Recurse -Force ".\Ai-Agent-Evaluation-Layer\skills\agent-evaluation-layer" "$HOME\.claude\skills\"
-python "$HOME\.claude\skills\agent-evaluation-layer\scripts\probe.py" --install-command
 ```
 
-然后在任何项目里输入 **`/eval`** 即可。就这么简单。
+然后在任何项目里输入 **`/agent-evaluation-layer`** 即可。就这么简单。（只想绑单个 repo,就复制到
+`<project>/.claude/skills/agent-evaluation-layer/`。）
 
 ---
 
@@ -163,16 +164,14 @@ Ai-Agent-Evaluation-Layer/
 ├── docs/
 │   └── install.md                           # 给 agent 读的安装手册（双语）
 └── skills/
-    └── agent-evaluation-layer/
+    └── agent-evaluation-layer/               # 放进 .claude/skills/，用 /agent-evaluation-layer 触发
         ├── SKILL.md                          # 方法本体（手动；单文件、无规则文件、无 hook）
-        ├── commands/
-        │   └── eval.md                       # /eval 斜杠命令（手动触发入口）
         ├── templates/
         │   └── EVALUATION_LOG.template.md    # 项目日志的起始模板
         ├── reference/
         │   └── rubric.md                     # 可选的 eval 时自查清单
         └── scripts/
-            └── probe.py                      # 安装器 / 脚手架 / 健康检查
+            └── probe.py                      # 脚手架 / 健康检查（不安装任何东西）
 ```
 
 ---
