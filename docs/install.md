@@ -94,11 +94,10 @@ file was created. From now on, in Claude Code:
   `.agent-eval/EVALUATION_LOG.md`（一个带日期、只增不改的历史文件，不是规则文件）。
 - **Any time after:** `/agent-evaluation-layer <what to record>` — e.g. `/agent-evaluation-layer fixed the rate-limit
   retry bug` or `/agent-evaluation-layer v2: added Stripe checkout`. It appends a dated memory entry
-  and commits `.agent-eval/`. / **之后任意时候**：`/agent-evaluation-layer <要记录的内容>`，它会追加一条
-  带日期的记忆并提交 `.agent-eval/`。
+  and **stages** `.agent-eval/` — it never commits or pushes; you review and commit yourself. / **之后任意时候**：`/agent-evaluation-layer <要记录的内容>`，它会追加一条
+  带日期的记忆并**暂存** `.agent-eval/`——它绝不 commit 或 push，由你自己 review 后提交。
 
-Commit the `.agent-eval/` folder so the memory travels with the repo. / 记得提交
-`.agent-eval/`，让记忆随仓库流转。
+The skill stages `.agent-eval/` for you; **you** commit it so the memory travels with the repo. / skill 会帮你暂存 `.agent-eval/`，**你自己**提交，让记忆随仓库流转。
 
 ---
 

@@ -21,7 +21,7 @@ does can affect your coding agent's behavior.
 You run `/agent-evaluation-layer` when you choose:
 
 - **First run** → creates `.agent-eval/EVALUATION_LOG.md`.
-- **Later runs** → e.g. `/agent-evaluation-layer fixed the rate-limit retry bug` → appends a dated entry and commits.
+- **Later runs** → e.g. `/agent-evaluation-layer fixed the rate-limit retry bug` → appends a dated entry and **stages** it (it never commits or pushes — you review and commit yourself).
 
 Between runs: nothing happens, no tokens spent.
 

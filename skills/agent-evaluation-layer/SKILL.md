@@ -58,6 +58,9 @@ or the project's own configuration. By design it:
 - **Does not install hooks, settings, or session automation.** It injects nothing
   into sessions, blocks no turns, and changes no agent behavior. Running `/agent-evaluation-layer`
   writes only `.agent-eval/EVALUATION_LOG.md`.
+- **Does not commit or push.** It only **stages** `.agent-eval/` (`git add`) so the
+  change shows up in `git status` for review. Reviewing the diff, committing, and
+  any push are **yours** — the skill never runs `git commit` or `git push`.
 
 This is what keeps the layer safe to add to any repo — including one already
 governed by a `CLAUDE.md` — with zero risk to the coding agent's behavior or
@@ -67,8 +70,8 @@ answer quality.
 
 ## What it creates
 
-Everything lives inside the target project at **`.agent-eval/`**, committed to the
-repo, so memory travels with the code:
+Everything lives inside the target project at **`.agent-eval/`** (you commit it to
+the repo yourself, so memory travels with the code):
 
 ```
 <project-root>/
@@ -107,11 +110,15 @@ lives), and tell the user to write the actual rule into their own project docs
 unless the user explicitly asks. Update the **Open Improvement Backlog**: add new
 items, check off resolved ones and reference the entry.
 
-### 4. Persist and report
+### 4. Stage and report (do NOT commit)
 Optionally apply the reference rubric (`reference/rubric.md`) as a lens to find
-issues worth logging. Commit the memory (`git add .agent-eval && git commit -m
-"eval: <summary>"`) and report the entry number, any decision pointer (plus the
-reminder to update the project's own docs), and the backlog delta.
+issues worth logging. Then **stage** the memory — `git add .agent-eval` — so it
+appears in `git status` as a pending change. **Do not commit and do not push**;
+leave the review, commit, and any push to the user. Report the entry number, any
+decision pointer (plus the reminder to update the project's own docs), the
+backlog delta, and a one-liner telling the user the change is **staged, not
+committed** — e.g. *"staged `.agent-eval/` — review with `git diff --cached` and
+commit when ready."*
 
 > **Append-only.** Never rewrite or delete past Log entries — supersede with a new
 > one and cross-reference it.
@@ -128,7 +135,8 @@ When `.agent-eval/EVALUATION_LOG.md` doesn't exist yet:
 2. Fill the log's **Purpose** line from the repo (infer what the project is from
    the README / package manifest / structure). Do **not** copy in a set of rules —
    the project's own docs already hold those.
-3. Write **Iteration Log Entry 1 — <today> — Bootstrap**, then commit.
+3. Write **Iteration Log Entry 1 — <today> — Bootstrap**, then **stage** it
+   (`git add .agent-eval`). Do **not** commit — the user reviews and commits.
 
 ---
 
@@ -160,6 +168,8 @@ tweak with no root cause) can stay in the commit message and skip the log.
 - **Never create a `SPEC.md` / rules file, and never edit `CLAUDE.md`** — record a
   pointer and let the user own their rules docs.
 - **Never install hooks or session automation** from this skill.
+- **Never commit or push.** Stage (`.agent-eval/`) only; the commit and push are
+  the user's.
 - **Never invent results in the Log** — if you didn't verify something, say so.
 - **Don't restate current rules in the Log** — rules generalize and live in the
   project's own docs; the Log records the dated *history* of why they exist.

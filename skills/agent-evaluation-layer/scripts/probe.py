@@ -181,7 +181,7 @@ def do_init(project_dir):
     print(f"  created: {LOG_FILE}")
     print(
         "\nNext: fill in the log's Purpose line (or just run `/agent-evaluation-layer` and let it seed\n"
-        "it from your repo), then commit .agent-eval/."
+        "it from your repo). The skill stages .agent-eval/ for you to review; you commit it yourself."
     )
     return 0
 
