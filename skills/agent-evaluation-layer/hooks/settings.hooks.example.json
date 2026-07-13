@@ -1,0 +1,27 @@
+{
+  "_comment": "Merge these hooks into your project's .claude/settings.json (or ~/.claude/settings.json for global). Replace __PYTHON__ with your Python interpreter (an absolute path is most robust) and __HOOK_SCRIPT__ with the absolute path to hooks/agent_eval_hooks.py in your installed skill. The command `python3 <skill>/scripts/probe.py --install-hooks --dir <project>` fills these in for you automatically.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "__PYTHON__",
+            "args": ["__HOOK_SCRIPT__", "--event", "session-start"]
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "__PYTHON__",
+            "args": ["__HOOK_SCRIPT__", "--event", "stop"]
+          }
+        ]
+      }
+    ]
+  }
+}
