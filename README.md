@@ -61,6 +61,29 @@ rubric，**4)** 近乎逐字记录用户反馈，**5)** 做一次「系统自审
 
 ---
 
+## Does it run by itself? / 会自动运行吗？
+
+Install and init are **one-time** per project — you don't re-trigger it each
+feature. But skills are *model-invoked*, so to make the loop fire **reliably**
+every iteration the layer wires itself into the project two ways:
+
+- a **`CLAUDE.md` pointer** (auto-loaded every session), and
+- **`SessionStart` + `Stop` hooks** (deterministic; the Stop hook nudges the
+  agent to log an iteration when code changed but the log didn't).
+
+`--init --with-hooks` sets both up. After that, just develop normally and the
+memory is written progress-by-progress. Silence the Stop nudge anytime with
+`AGENT_EVAL_ENFORCE=off`.
+
+安装和初始化对每个项目只需**一次**，不用每个功能都手动触发。但由于技能是*模型自行
+调用*的，为了让循环**稳定**在每次迭代触发，评估层会用两种方式接入项目：一段
+**`CLAUDE.md` 指引**（每个会话自动加载），以及 **`SessionStart` + `Stop` 钩子**
+（确定性执行；当有代码改动却没更新日志时，Stop 钩子会提醒 agent 记录本次迭代）。
+`--init --with-hooks` 会一次装好两者。之后正常开发即可，记忆会一步步写入。想关闭
+Stop 提醒，设 `AGENT_EVAL_ENFORCE=off`。
+
+---
+
 ## Install / 安装
 
 ### Option A (recommended) — one prompt / 方案 A（推荐）：一句话安装
@@ -91,56 +114,14 @@ cp -R Ai-Agent-Evaluation-Layer/skills/agent-evaluation-layer ~/.claude/skills/
 # Project: copy it to <project>/.claude/skills/ instead
 ```
 
-Then initialize a project's memory folder:
+Then initialize a project's memory folder **and** wire it to run automatically
+(creates `.agent-eval/`, appends the `CLAUDE.md` pointer, installs the hooks):
 
 ```bash
-python3 ~/.claude/skills/agent-evaluation-layer/scripts/probe.py --init --dir /path/to/project
+python3 ~/.claude/skills/agent-evaluation-layer/scripts/probe.py --init --with-hooks --dir /path/to/project
 ```
 
 Or on Windows PowerShell:
 
 ```powershell
-New-Item -ItemType Directory -Force -Path "$HOME\.claude\skills" | Out-Null
-Copy-Item -Recurse -Force ".\Ai-Agent-Evaluation-Layer\skills\agent-evaluation-layer" "$HOME\.claude\skills\"
-python "$HOME\.claude\skills\agent-evaluation-layer\scripts\probe.py" --init --dir "C:\path\to\project"
-```
-
----
-
-## Health check / 健康检查
-
-```bash
-python3 <skill>/scripts/probe.py --dir /path/to/project           # human report
-python3 <skill>/scripts/probe.py --dir /path/to/project --json    # machine-readable
-python3 <skill>/scripts/probe.py --dir /path/to/project --strict  # warnings -> exit 2
-```
-
-`probe.py` uses only the Python 3 standard library — no `pip install` needed.
-
----
-
-## Repository layout / 仓库结构
-
-```
-Ai-Agent-Evaluation-Layer/
-├── README.md
-├── LICENSE
-├── docs/
-│   └── install.md                         # agent-readable install manual (bilingual)
-└── skills/
-    └── agent-evaluation-layer/
-        ├── SKILL.md                        # the skill: the full iteration loop
-        ├── templates/
-        │   ├── SPEC.template.md
-        │   └── EVALUATION_LOG.template.md
-        ├── reference/
-        │   └── rubric.md                   # rubric menu to build a project's rubric from
-        └── scripts/
-            └── probe.py                    # health check + --init scaffolder
-```
-
----
-
-## License
-
-MIT — see [LICENSE](LICENSE).
+New-Item -ItemType Directory -Force -Path "$HOME\.claude\skills

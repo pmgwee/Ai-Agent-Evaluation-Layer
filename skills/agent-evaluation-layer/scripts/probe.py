@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 """
-probe.py — health check & scaffolder for the Agent Evaluation Layer.
+probe.py — health check, scaffolder & enforcement-wiring for the Agent Evaluation Layer.
 
 Dependency-free (Python 3 standard library only). Verifies that a project's
-`.agent-eval/` layer exists and is well-formed, or scaffolds a fresh one from
-the skill's templates.
+`.agent-eval/` layer exists and is well-formed, scaffolds a fresh one from the
+skill's templates, wires the CLAUDE.md pointer, and installs the Claude Code
+hooks that make the loop run automatically.
 
 Usage:
-    python probe.py --dir /path/to/project          # report on the layer
-    python probe.py --init --dir /path/to/project   # scaffold from templates (won't overwrite)
-    python probe.py --dir /path/to/project --json    # machine-readable report
-    python probe.py --dir /path/to/project --strict  # warnings -> non-zero exit
+    python probe.py --dir /path/to/project                    # report on the layer
+    python probe.py --init --dir /path/to/project             # scaffold + wire CLAUDE.md
+    python probe.py --init --with-hooks --dir /path/to/project # scaffold + CLAUDE.md + hooks
+    python probe.py --install-hooks --dir /path/to/project     # only (re)install hooks
+    python probe.py --dir /path/to/project --json              # machine-readable report
+    python probe.py --dir /path/to/project --strict            # warnings -> non-zero exit
 
 Exit codes:
     0  healthy (no errors; warnings allowed unless --strict)
@@ -28,6 +31,7 @@ from datetime import date, datetime
 EVAL_DIR = ".agent-eval"
 SPEC_FILE = "SPEC.md"
 LOG_FILE = "EVALUATION_LOG.md"
+CLAUDE_SNIPPET_MARKER = "<!-- agent-evaluation-layer:start -->"
 
 # Required section keywords, matched case-insensitively against heading lines.
 SPEC_REQUIRED = [
@@ -146,7 +150,7 @@ def probe(project_dir):
         last_date = max(dates)
         report["info"]["last_entry_date"] = last_date
         report["info"]["highest_entry_number"] = max(nums)
-        # duplicate / gap detection
+        # duplicate detection
         if len(set(nums)) != len(nums):
             report["warnings"].append("Duplicate Entry numbers detected — entry numbers must be unique.")
         try:
@@ -168,7 +172,6 @@ def probe(project_dir):
         latest_v_date = version_rows[-1][1].strip()
         report["info"]["spec_latest_version"] = latest_version
         report["info"]["spec_latest_version_date"] = latest_v_date
-        # The most recent spec-version date should appear somewhere in the log's changelog area.
         changelog_idx = re.search(r"rules changelog", log, re.I)
         changelog_text = log[changelog_idx.start():] if changelog_idx else log
         if latest_v_date not in changelog_text:
@@ -190,11 +193,103 @@ def probe(project_dir):
     return report
 
 
-def do_init(project_dir):
-    """Copy templates into <project_dir>/.agent-eval/ without overwriting."""
-    templates_dir = os.path.normpath(
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "templates")
-    )
+# ---------------- scaffolding & enforcement wiring ----------------
+
+def _skill_dir():
+    """The installed skill's root directory (parent of scripts/)."""
+    return os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+
+
+def _templates_dir():
+    return os.path.join(_skill_dir(), "templates")
+
+
+def append_claude_md(project_dir):
+    """Append the CLAUDE.md pointer snippet to <project>/CLAUDE.md (idempotent)."""
+    snippet_path = os.path.join(_templates_dir(), "CLAUDE.snippet.md")
+    if not os.path.isfile(snippet_path):
+        print(f"  CLAUDE.md: snippet template not found ({snippet_path}) — skipped", file=sys.stderr)
+        return
+    snippet = read(snippet_path).strip()
+    claude_path = os.path.join(os.path.abspath(project_dir), "CLAUDE.md")
+    existing = ""
+    if os.path.isfile(claude_path):
+        existing = read(claude_path)
+    if CLAUDE_SNIPPET_MARKER in existing:
+        print("  CLAUDE.md: pointer already present — skipped")
+        return
+    if existing == "" or existing.endswith("\n\n"):
+        sep = ""
+    elif existing.endswith("\n"):
+        sep = "\n"
+    else:
+        sep = "\n\n"
+    with open(claude_path, "a", encoding="utf-8") as fh:
+        fh.write(sep + snippet + "\n")
+    verb = "created" if not existing else "appended pointer to"
+    print(f"  CLAUDE.md: {verb} {claude_path}")
+
+
+def install_hooks(project_dir):
+    """Merge SessionStart + Stop hooks into <project>/.claude/settings.json (idempotent)."""
+    hook_script = os.path.join(_skill_dir(), "hooks", "agent_eval_hooks.py")
+    if not os.path.isfile(hook_script):
+        print(f"ERROR: hook script not found: {hook_script}", file=sys.stderr)
+        return 1
+    python = sys.executable or "python3"
+    settings_dir = os.path.join(os.path.abspath(project_dir), ".claude")
+    os.makedirs(settings_dir, exist_ok=True)
+    settings_path = os.path.join(settings_dir, "settings.json")
+
+    settings = {}
+    if os.path.isfile(settings_path):
+        try:
+            settings = json.loads(read(settings_path))
+        except Exception as e:
+            print(f"ERROR: could not parse {settings_path}: {e}", file=sys.stderr)
+            return 1
+    hooks = settings.setdefault("hooks", {})
+
+    events = {"SessionStart": "session-start", "Stop": "stop"}
+    changed = False
+    for event, mode in events.items():
+        groups = hooks.setdefault(event, [])
+        already = any(
+            any(
+                h.get("type") == "command"
+                and isinstance(h.get("args"), list)
+                and hook_script in h.get("args", [])
+                and mode in h.get("args", [])
+                for h in g.get("hooks", [])
+            )
+            for g in groups if isinstance(g, dict)
+        )
+        if already:
+            continue
+        groups.append({
+            "hooks": [{
+                "type": "command",
+                "command": python,
+                "args": [hook_script, "--event", mode],
+            }]
+        })
+        changed = True
+
+    if changed:
+        with open(settings_path, "w", encoding="utf-8") as fh:
+            json.dump(settings, fh, indent=2)
+            fh.write("\n")
+        print(f"  hooks: installed SessionStart + Stop -> {settings_path}")
+        print(f"         interpreter: {python}")
+        print(f"         handler    : {hook_script}")
+    else:
+        print(f"  hooks: already installed in {settings_path} — skipped")
+    return 0
+
+
+def do_init(project_dir, with_hooks=False):
+    """Copy templates into <project_dir>/.agent-eval/ (no overwrite) + wire CLAUDE.md and hooks."""
+    templates_dir = _templates_dir()
     src = {
         SPEC_FILE: os.path.join(templates_dir, "SPEC.template.md"),
         LOG_FILE: os.path.join(templates_dir, "EVALUATION_LOG.template.md"),
@@ -223,13 +318,24 @@ def do_init(project_dir):
         print("  created: " + ", ".join(created))
     if skipped:
         print("  skipped (already present): " + ", ".join(skipped))
+
+    # Always wire the always-loaded CLAUDE.md pointer.
+    append_claude_md(project_dir)
+
+    # Optionally wire deterministic hooks.
+    if with_hooks:
+        install_hooks(project_dir)
+
     print(
-        "\nNext: open the two files and fill in Purpose, Source of Truth, initial\n"
-        "Rules (R1..), and the Self-Review Rubric — then write Iteration Log Entry 1\n"
-        "and commit .agent-eval/ to the repo."
+        "\nNext: open .agent-eval/SPEC.md + EVALUATION_LOG.md and fill in Purpose,\n"
+        "Source of Truth, initial Rules (R1..), and the Self-Review Rubric — then\n"
+        "write Iteration Log Entry 1 and commit .agent-eval/ (and CLAUDE.md,\n"
+        ".claude/settings.json if hooks were installed) to the repo."
     )
     return 0
 
+
+# ---------------- reporting ----------------
 
 def print_report(report):
     line = "=" * 60
@@ -253,7 +359,7 @@ def print_report(report):
         print("-" * 60)
         print(f"ERRORS ({len(report['errors'])}):")
         for e in report["errors"]:
-            print(f"  ✗ {e}")
+            print(f"  x {e}")
     if report["warnings"]:
         print("-" * 60)
         print(f"WARNINGS ({len(report['warnings'])}):")
@@ -265,20 +371,25 @@ def print_report(report):
     elif report["warnings"]:
         print("RESULT: OK with warnings.")
     else:
-        print("RESULT: HEALTHY ✓")
+        print("RESULT: HEALTHY")
     print(line)
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="Health check / scaffolder for the Agent Evaluation Layer.")
+    ap = argparse.ArgumentParser(description="Health check / scaffolder / hook-installer for the Agent Evaluation Layer.")
     ap.add_argument("--dir", default=".", help="project directory (default: current dir)")
-    ap.add_argument("--init", action="store_true", help="scaffold .agent-eval/ from templates (won't overwrite)")
+    ap.add_argument("--init", action="store_true", help="scaffold .agent-eval/ from templates (won't overwrite) + wire CLAUDE.md")
+    ap.add_argument("--with-hooks", action="store_true", help="with --init, also install SessionStart+Stop hooks into .claude/settings.json")
+    ap.add_argument("--install-hooks", action="store_true", help="only install/merge the hooks into .claude/settings.json, then exit")
     ap.add_argument("--json", action="store_true", help="print the report as JSON")
     ap.add_argument("--strict", action="store_true", help="treat warnings as a non-zero (2) exit")
     args = ap.parse_args(argv)
 
+    if args.install_hooks and not args.init:
+        return install_hooks(args.dir)
+
     if args.init:
-        rc = do_init(args.dir)
+        rc = do_init(args.dir, with_hooks=(args.with_hooks or args.install_hooks))
         if rc != 0:
             return rc
         # fall through to a probe of what we just created

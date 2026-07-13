@@ -124,6 +124,41 @@ Append a new dated entry to the **Iteration Log** using the entry template in
 
 ---
 
+## Making the loop run automatically (enforcement)
+
+Installing the skill is a **one-time** step, and so is `--init` per project. But
+being installed does not by itself guarantee the loop runs every iteration —
+skills are *model-invoked*, so the agent decides per task whether to consult
+this skill, and it can under-trigger on a plain "add feature X" prompt. For
+reliable, hands-off operation, wire the layer into the project so triggering
+isn't left to chance. Two mechanisms, used together:
+
+1. **`CLAUDE.md` pointer (always-loaded).** `probe.py --init` appends a short
+   pointer (from `templates/CLAUDE.snippet.md`) to the project's `CLAUDE.md`.
+   Because Claude Code loads `CLAUDE.md` into context at the start of every
+   session, the agent is reminded on every task to read `.agent-eval/` first and
+   update it before finishing. This is the highest-leverage, lowest-friction
+   step.
+
+2. **Claude Code hooks (deterministic).** `probe.py --install-hooks` merges two
+   hooks into the project's `.claude/settings.json`, both handled by
+   `hooks/agent_eval_hooks.py`:
+   - **`SessionStart`** → injects the layer's status and the read/update
+     instruction as context at the start of every session.
+   - **`Stop`** → when a turn ends with uncommitted changes to files *outside*
+     `.agent-eval/` but no update to `EVALUATION_LOG.md`, it asks the agent
+     (via a `decision: block` continuation) to record the iteration before
+     finishing. It is loop-safe (honors `stop_hook_active`), never fires on
+     read-only/Q&A turns (no working-tree changes) or when git is unavailable,
+     and can be silenced with the env var `AGENT_EVAL_ENFORCE=off`.
+
+Do both with one command: `python <skill>/scripts/probe.py --init --with-hooks
+--dir <project-root>`. Commit `CLAUDE.md` and `.claude/settings.json` so the
+enforcement travels with the repo. After this, the user just develops normally
+and the memory is written iteration by iteration without re-triggering anything.
+
+---
+
 ## Bootstrapping a new project
 
 When `.agent-eval/` doesn't exist yet:
@@ -181,52 +216,4 @@ entry. Reserve the Spec for things that generalize across future iterations.
   past mistake with a *new* entry that supersedes the old one, and cross-
   reference it — don't edit the old entry away.
 - **Never let the Spec and the Log's Rules Changelog drift.** A rule change
-  updates both, in the same iteration.
-- **Never skip step 6 to "save time".** An un-logged iteration is how context
-  dies. The whole point of the layer is defeated by one silent turn.
-- **Never invent results in the Log.** If the rubric wasn't fully run, say so in
-  the entry rather than claiming a clean pass.
-- **Don't bloat the Spec with task trivia.** Rules generalize; task details go in
-  the Log entry.
-
----
-
-## Probe (health check)
-
-`scripts/probe.py` is a dependency-free (Python 3 standard library only)
-self-check. Run it any time to get a real status report of a project's
-evaluation layer.
-
-```bash
-# Report on the layer in the current project
-python scripts/probe.py --dir /path/to/project
-
-# Scaffold a new layer from the templates (safe: won't overwrite existing files)
-python scripts/probe.py --init --dir /path/to/project
-
-# Machine-readable output
-python scripts/probe.py --dir /path/to/project --json
-
-# Treat warnings (e.g. Spec/Changelog drift, stale backlog) as failures
-python scripts/probe.py --dir /path/to/project --strict
-```
-
-It verifies both files exist, checks that every required section is present,
-counts iteration entries, reports the last entry date and open-backlog count,
-and flags Spec ↔ Changelog version drift. Exit code `0` = healthy, `1` = not
-initialized or missing required structure, `2` = warnings under `--strict`.
-
-Use the probe's **actual printed output** when reporting status — never claim a
-layer is healthy without running it.
-
----
-
-## Files in this skill
-
-- `templates/SPEC.template.md` — starting point for a project's `SPEC.md`.
-- `templates/EVALUATION_LOG.template.md` — starting point for `EVALUATION_LOG.md`,
-  including the per-iteration entry template.
-- `reference/rubric.md` — a reusable, domain-agnostic Self-Review Rubric and a
-  menu of optional checks (performance, security, accessibility, tests) to pull
-  from when tailoring a project's rubric.
-- `scripts/probe.py` — the health-check / `--init` scaffolder described above.
+  updates both, in th

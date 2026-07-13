@@ -104,18 +104,40 @@ ls <target>/agent-evaluation-layer      # expect: SKILL.md  templates/  referenc
 
 ---
 
-## Step 5 — Initialize the evaluation layer in the chosen project / 在所选项目里初始化评估层
+## Step 5 — Initialize the layer AND wire enforcement / 初始化评估层并接入强制执行
 
-From inside (or pointing at) the project chosen in Step 1: / 针对第 1 步选定的项目：
+From inside (or pointing at) the project chosen in Step 1, run the one command
+that scaffolds the memory **and** wires it to run automatically every iteration:
+针对第 1 步选定的项目，运行这一条命令：它会创建记忆文件**并**接好「每次迭代自动运行」的开关：
 
 ```bash
-python3 <skill>/scripts/probe.py --init --dir <project-root>
+python3 <skill>/scripts/probe.py --init --with-hooks --dir <project-root>
 ```
 
 `<skill>` is where you copied it (e.g. `~/.claude/skills/agent-evaluation-layer`).
-This creates `<project-root>/.agent-eval/SPEC.md` and `EVALUATION_LOG.md` from the
-templates (it will not overwrite files that already exist).
-这会从模板创建 `<项目>/.agent-eval/SPEC.md` 和 `EVALUATION_LOG.md`（不会覆盖已存在的文件）。
+This does three things / 这条命令做三件事:
+
+1. Creates `<project-root>/.agent-eval/SPEC.md` and `EVALUATION_LOG.md` from the
+   templates (won't overwrite existing files). / 从模板创建 `.agent-eval/SPEC.md` 和
+   `EVALUATION_LOG.md`（不覆盖已有文件）。
+2. Appends a pointer to `<project-root>/CLAUDE.md` so **every** Claude Code
+   session auto-loads the instruction to read/update the layer. / 往 `CLAUDE.md`
+   追加一段指引，让**每个**会话自动加载「读取/更新评估层」的规则。
+3. Installs `SessionStart` + `Stop` hooks into `<project-root>/.claude/settings.json`
+   (deterministic reminders). / 把 `SessionStart` + `Stop` 钩子写入
+   `.claude/settings.json`（确定性提醒）。
+
+> **Why enforcement?** Skills are *model-invoked* — the agent may under-trigger a
+> skill on a plain "add feature X" prompt. The CLAUDE.md pointer + hooks make the
+> loop fire reliably without you re-triggering it. / **为什么需要强制执行？** 技能是
+> *模型自行调用*的，普通的「加个功能」提示可能不会触发它。CLAUDE.md 指引 + 钩子能让
+> 循环稳定触发，无需你每次手动触发。
+>
+> Prefer files-only (no hooks)? Use `--init` without `--with-hooks`. To add hooks
+> later: `python3 <skill>/scripts/probe.py --install-hooks --dir <project-root>`.
+> The Stop reminder can be silenced with `AGENT_EVAL_ENFORCE=off`. / 只想要文件、
+> 不要钩子？去掉 `--with-hooks`。之后再加钩子用 `--install-hooks`。Stop 提醒可用
+> `AGENT_EVAL_ENFORCE=off` 关闭。
 
 ---
 
@@ -135,33 +157,4 @@ Exit codes / 退出码: `0` healthy / 健康 · `1` not initialized or missing s
 
 ---
 
-## Step 7 — Fill in the Spec and write Entry 1 / 填写 Spec 并写下第 1 条记录
-
-Open `<project-root>/.agent-eval/SPEC.md`, fill in **Purpose**, **Source of
-Truth**, initial **Rules (R1..)**, and the **Self-Review Rubric** (use
-`reference/rubric.md` as a menu). Then write **Iteration Log Entry 1** in
-`EVALUATION_LOG.md` and commit:
-打开 `SPEC.md`，填写 Purpose、Source of Truth、初始 Rules、Self-Review Rubric（可参考
-`reference/rubric.md`）。然后在 `EVALUATION_LOG.md` 写下第 1 条 Iteration Log 记录并提交：
-
-```bash
-cd <project-root>
-git add .agent-eval && git commit -m "chore: install agent evaluation layer"
-```
-
-Re-run the probe to confirm the warnings clear. / 再跑一次 probe 确认 warning 消失。
-
----
-
-## Done — how the layer is used from now on / 完成——之后如何使用
-
-The skill triggers automatically. On every future task in a project that has a
-`.agent-eval/` folder, the agent should: **(1)** read `SPEC.md` + recent log
-entries at the start, **(2)** do the work per the rules, **(3)** run the rubric,
-**(4)** append a dated Iteration Log entry, **(5)** update the backlog, and
-**(6)** commit `.agent-eval/`. See the skill's `SKILL.md` for the full loop.
-
-技能会自动触发。今后在任何带 `.agent-eval/` 的项目里，agent 都应：**(1)** 开始时先读
-`SPEC.md` 和最近的记录，**(2)** 按规则做事，**(3)** 跑 rubric，**(4)** 追加一条带
-日期的 Iteration Log，**(5)** 更新 backlog，**(6)** 提交 `.agent-eval/`。完整循环见
-技能的 `SKILL.md`。
+## Step 7 — Fill in the Spec and write Entry 1 
