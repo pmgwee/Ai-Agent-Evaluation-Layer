@@ -1,41 +1,60 @@
 ---
 name: agent-evaluation-layer
 description: >-
-  Universal evaluation & iteration-refinement layer for any agent-built software
-  project. Use this skill whenever the user wants their project or agent to
-  self-improve across iterations, keep memory across sessions and across
-  different AI agents, track defects / weaknesses / lessons-learnt, maintain a
-  versioned spec of rules, rubrics and regulations, capture real user feedback
-  into durable searchable memory, run a self-review or quality-gate rubric
-  before shipping, or push a system toward production-grade / top-tier quality.
-  Trigger it at the START of a work session on such a project (to load prior
-  context) and BEFORE ENDING a turn (to record what changed) — even if the user
-  never says the words "evaluation layer". Also use when setting up this loop for
-  a new project, or when asked to review a system for possible defects and next
-  improvements.
+  Universal evaluation & iteration-refinement memory layer for any agent-built
+  project, driven manually by the `/eval` command. Use it when the user wants to
+  set up or update a project's durable memory of rules, rubrics, defects,
+  lessons-learnt, and real feedback that survives across sessions and across
+  different AI agents — for example "record this bug fix into the eval layer",
+  "log this version's enhancement", "add this as a rule", or "set up the
+  evaluation layer for this project". The user triggers it on demand; it does not
+  run in the background. An OPTIONAL automatic mode (hooks + CLAUDE.md) exists for
+  people who want it to run every iteration without asking.
+disable-model-invocation: true
 license: MIT
 ---
 
 # Agent Evaluation Layer — Iteration Refinement
 
-A drop-in memory-and-quality loop that makes any agent-built project **compound
-in quality every iteration** instead of resetting each session. It gives a
-project two durable files and one repeatable loop, so that enhancements, fixes,
-new rules, rubrics, regulations, and real user feedback are captured the moment
-they happen and carried forward across sessions and across different AI agents.
+A drop-in memory-and-quality loop that lets any agent-built project **compound in
+quality over time** instead of resetting each session. Enhancements, fixes, new
+rules, rubrics, regulations, and real user feedback get captured into two durable
+files that travel across sessions and across different AI agents.
 
-This is a generalization of a proven pattern: a versioned **Spec** (the rules)
-plus an append-only **Evaluation & Memory Log** (the memory of why each rule
-exists and whether it's working). This skill turns that pattern into something
-you can drop into *every* repo.
+This generalizes a proven pattern: a versioned **Spec** (the rules) plus an
+append-only **Evaluation & Memory Log** (the memory of why each rule exists and
+whether it's working).
+
+> **This skill is manual by default.** It is marked `disable-model-invocation:
+> true`, so it never runs on its own and never spends tokens in the background.
+> It runs only when the user invokes the **`/eval`** command (or when an agent is
+> explicitly told to follow it). An optional automatic mode is described at the
+> end.
 
 ---
 
-## What this skill creates
+## Two ways to use it
 
-Everything lives inside the target project at **`.agent-eval/`** and is
-committed to the repo, so the memory travels with the code — any future session,
-any agent, on any machine, starts with full context after a `git pull`.
+**A) Manual — the `/eval` command (default, recommended).**
+The user runs `/eval` at the moments they choose:
+- **First run in a project** → bootstraps `.agent-eval/` (creates the Spec + Log).
+- **Later runs** → records what the user names — `/eval fixed the rate-limit retry
+  bug`, `/eval v2: added Stripe checkout`, `/eval add "never store secrets in
+  logs" as a rule` — into the memory, then commits.
+
+Nothing runs between invocations. This is the lowest-friction, lowest-token way
+to use the layer.
+
+**B) Automatic — hooks + CLAUDE.md (optional, advanced).**
+For hands-off operation where the layer fires every iteration on its own. See
+*Optional: automatic mode* below. Most users don't need this.
+
+---
+
+## What it creates
+
+Everything lives inside the target project at **`.agent-eval/`**, committed to
+the repo, so memory travels with the code:
 
 ```
 <project-root>/
@@ -44,118 +63,39 @@ any agent, on any machine, starts with full context after a `git pull`.
     └── EVALUATION_LOG.md  # append-only memory: feedback, defects, lessons, backlog
 ```
 
-Two files, on purpose. The Spec answers **"what are the rules right now?"** The
-Log answers **"why is that a rule, what broke, what did we learn, what's next?"**
-Together they *are* the system's persistent memory.
+The Spec answers **"what are the rules right now?"** The Log answers **"why is
+that a rule, what broke, what did we learn, what's next?"** Together they **are**
+the system's persistent memory.
 
 ---
 
-## The core loop (run this every iteration)
+## The method (what `/eval` does each run)
 
-Follow these seven steps on every task against a project that uses this layer.
-Steps 1 and 6–7 are non-negotiable — they are what makes memory survive.
+### 1. Locate or bootstrap
+- If `.agent-eval/` doesn't exist → **bootstrap** (see below), then continue.
+- If it exists → read `SPEC.md` in full and the last 2–3 Iteration Log entries.
 
-### 1. Load context (session start / new task)
-- If `.agent-eval/` does **not** exist → this is a new project. Go to
-  **Bootstrapping** below, then continue.
-- If it exists:
-  - Read `.agent-eval/SPEC.md` **in full**.
-  - Read the Log's **Rules Changelog**, **Open Improvement Backlog**, and the
-    **last 2–3 Iteration Log entries**. (Older entries stay searchable but you
-    don't need them all in context.)
-  - Optionally run the probe for a fast health check:
-    `python <skill>/scripts/probe.py --dir <project-root>`
-    (path depends on where the skill is installed; see **Probe** below).
+### 2. Record the iteration
+Take what the user named for this run (a fix, an enhancement, a new
+rule/rubric/regulation, or feedback). If they gave nothing, ask — or checkpoint
+recent work using `git log`/`git diff` since the last entry. Then append a new
+dated **Iteration Log** entry with: what changed, defects + root cause, lesson
+learnt, user feedback near-verbatim, rubric result, and a suggested next
+improvement.
 
-### 2. Do the work — strictly per the current Spec
-Every current rule in the Spec applies. Do not silently deviate. If the user's
-new request *conflicts* with a Spec rule, surface the conflict rather than
-quietly overriding it — then, if they confirm the change, treat it as a rule
-change (step 6).
+### 3. Update rules if needed
+If this run introduces a durable rule/rubric/regulation, add it to the Spec's
+Rules and bump the Spec **Version History** *and* the Log's **Rules Changelog**
+(keep them in sync — the probe checks this). Update the **Open Improvement
+Backlog**: add new items, check off resolved ones and reference the entry.
 
-### 3. Self-review against the rubric
-Run the **Self-Review Rubric** from the Spec against what you just produced.
-Check each item **by name/number**. Every failing item is a **Defect** — record
-it in this iteration's entry with a one-line root cause, don't just fix it
-silently. (A defect that's caught and fixed is still a logged lesson.)
+### 4. Persist and report
+Run the Spec's Self-Review Rubric against the recent work; log any misses as
+defects. Commit the memory (`git add .agent-eval && git commit -m "eval: <summary>"`)
+and report the entry number, any rule/version change, and the backlog delta.
 
-### 4. Capture the brief and the feedback — near-verbatim
-Record the user's request for this iteration, and any feedback they gave
-(positive **or** corrective), close to word-for-word. Don't paraphrase away the
-specifics — a future agent needs the exact ask, not your summary of it.
-Confirmations matter as much as corrections: if the user validated a non-obvious
-choice, log it so the system doesn't drift away from something that already
-worked.
-
-### 5. Advisory pass — the system reviews itself
-This is the step that drives the project toward production-grade. Independently
-of the immediate task, inspect the **current system** for latent problems and
-propose concrete next improvements:
-- What defect, weakness, edge case, scaling limit, security gap, or maintenance
-  burden is *likely to bite next*, even if nothing broke this time?
-- What would move this closer to top-tier / production-scale quality?
-
-Write each finding into the **Open Improvement Backlog** as an actionable item.
-Advise — don't auto-implement — unless the user asks.
-
-### 6. Write memory (append, never overwrite)
-Append a new dated entry to the **Iteration Log** using the entry template in
-`EVALUATION_LOG.template.md`. Then:
-- If any **rule, rubric, or regulation changed**, update the Log's **Rules
-  Changelog** *and* bump the **Version History** table in the Spec (keep them in
-  sync — the probe checks this).
-- Move any backlog items you resolved out of the backlog and reference them from
-  the entry (check them off — never delete history).
-
-### 7. Persist
-- **In a git project (Claude Code / normal repo):** stage and commit the
-  `.agent-eval/` changes so they travel across sessions and agents, e.g.
-  `git add .agent-eval && git commit -m "eval: iteration <N> — <short summary>"`.
-  Commit the memory update *with* the work it describes when practical.
-- **In Cowork (no automatic cross-session memory):** surface the updated
-  `.agent-eval/SPEC.md` and `.agent-eval/EVALUATION_LOG.md` back to the user and
-  remind them these two files (plus any source-of-truth inputs) must be
-  re-supplied at the start of the next session.
-
-> **Definition of done for an iteration:** the deliverable is produced, the
-> rubric was run, a dated Iteration Log entry exists, the backlog is current,
-> the Spec/Changelog are in sync if a rule changed, and the memory is persisted.
-> If any of those is missing, the iteration isn't done.
-
----
-
-## Making the loop run automatically (enforcement)
-
-Installing the skill is a **one-time** step, and so is `--init` per project. But
-being installed does not by itself guarantee the loop runs every iteration —
-skills are *model-invoked*, so the agent decides per task whether to consult
-this skill, and it can under-trigger on a plain "add feature X" prompt. For
-reliable, hands-off operation, wire the layer into the project so triggering
-isn't left to chance. Two mechanisms, used together:
-
-1. **`CLAUDE.md` pointer (always-loaded).** `probe.py --init` appends a short
-   pointer (from `templates/CLAUDE.snippet.md`) to the project's `CLAUDE.md`.
-   Because Claude Code loads `CLAUDE.md` into context at the start of every
-   session, the agent is reminded on every task to read `.agent-eval/` first and
-   update it before finishing. This is the highest-leverage, lowest-friction
-   step.
-
-2. **Claude Code hooks (deterministic).** `probe.py --install-hooks` merges two
-   hooks into the project's `.claude/settings.json`, both handled by
-   `hooks/agent_eval_hooks.py`:
-   - **`SessionStart`** → injects the layer's status and the read/update
-     instruction as context at the start of every session.
-   - **`Stop`** → when a turn ends with uncommitted changes to files *outside*
-     `.agent-eval/` but no update to `EVALUATION_LOG.md`, it asks the agent
-     (via a `decision: block` continuation) to record the iteration before
-     finishing. It is loop-safe (honors `stop_hook_active`), never fires on
-     read-only/Q&A turns (no working-tree changes) or when git is unavailable,
-     and can be silenced with the env var `AGENT_EVAL_ENFORCE=off`.
-
-Do both with one command: `python <skill>/scripts/probe.py --init --with-hooks
---dir <project-root>`. Commit `CLAUDE.md` and `.claude/settings.json` so the
-enforcement travels with the repo. After this, the user just develops normally
-and the memory is written iteration by iteration without re-triggering anything.
+> **Append-only.** Never rewrite or delete past Log entries — supersede with a new
+> one and cross-reference it.
 
 ---
 
@@ -163,57 +103,115 @@ and the memory is written iteration by iteration without re-triggering anything.
 
 When `.agent-eval/` doesn't exist yet:
 
-1. Create the directory `.agent-eval/`.
-2. Copy `templates/SPEC.template.md` → `.agent-eval/SPEC.md` and
-   `templates/EVALUATION_LOG.template.md` → `.agent-eval/EVALUATION_LOG.md`
-   (or run `python <skill>/scripts/probe.py --init --dir <project-root>`, which
-   does the copy for you).
-3. Fill in the Spec's **Purpose**, **Source of Truth**, initial **Rules &
-   Regulations**, and a starter **Self-Review Rubric**. Derive these from: the
-   user's stated goals, the repo's README / architecture, and obvious quality
-   bars for the project's stack (e.g. tests pass, no secrets committed,
-   accessibility, performance budgets — whatever fits the domain). Keep the first
-   version small and true; the loop will grow it.
-4. Write **Iteration Log Entry 1** describing the bootstrap and the initial
-   ruleset, then commit.
+1. Create `.agent-eval/` and copy `templates/SPEC.template.md` →
+   `.agent-eval/SPEC.md` and `templates/EVALUATION_LOG.template.md` →
+   `.agent-eval/EVALUATION_LOG.md` (or run
+   `python <skill>/scripts/probe.py --init --dir <project-root>`).
+2. Seed the Spec from the repo: infer **Purpose** and **Source of Truth** from the
+   README / package manifest / structure; propose 2–4 starter **Rules** and a
+   short **Self-Review Rubric** fitting the stack. Ask the user at most 1–2 quick
+   questions, and only if something critical is genuinely unclear.
+3. Write **Iteration Log Entry 1 — <today> — Bootstrap**, then commit.
 
-Interview the user briefly if the purpose or the non-negotiable rules aren't
-clear from context. A thin, honest Spec beats a bloated, speculative one.
+A thin, honest Spec beats a bloated, speculative one — the loop grows it.
 
 ---
 
 ## What counts as a "rule" worth versioning
 
 Put something in the Spec (and log *why* in the Log) when it is a durable
-constraint on how work is done, for example:
-- a **rule** the user gave ("never fabricate content", "never delete an item
-  from a list — reorder instead"),
-- a **rubric** / quality gate (a checklist run before shipping),
-- a **regulation** / policy (ATS-safety, licensing, data-handling, security),
-- a **refinement** that fixed a real defect and should never regress.
-
-One-off task details are *not* rules — they belong only in that iteration's Log
-entry. Reserve the Spec for things that generalize across future iterations.
+constraint: a **rule** the user gave, a **rubric**/quality gate, a
+**regulation**/policy (security, licensing, data-handling), or a **refinement**
+that fixed a real defect and should never regress. One-off task details are not
+rules — they live only in that iteration's Log entry.
 
 ---
 
-## Searchability conventions (so memory is findable, not just stored)
+## Searchability conventions
 
-- **Every Iteration Log entry is dated and numbered** (`### Entry <N> — YYYY-MM-DD`).
-  Numbers are stable and never reused.
-- **Convert relative dates to absolute** when writing ("yesterday" → the actual
-  date), so entries stay interpretable months later.
-- **Tag entries with keywords** on a `Tags:` line (rule names, feature areas,
-  defect types) so a plain text search across the file lands on the right entry.
-- Refer to recurring topics with a stable slug in double brackets, e.g.
-  `[[non-destructive-reorder]]`, so every mention of that topic is greppable.
+- Every Iteration Log entry is dated and numbered (`### Entry <N> — YYYY-MM-DD`);
+  numbers are stable and never reused.
+- Convert relative dates to absolute when writing ("yesterday" → the real date).
+- Tag entries with a `Tags:` line (rule names, feature areas, defect types) and
+  refer to recurring topics with a stable slug like `[[topic-name]]` so a plain
+  text search lands on the right entry.
 
 ---
 
-## Hard rules for this skill (anti-patterns)
+## Hard rules (anti-patterns)
 
-- **Never rewrite or delete Log history.** The Log is append-only. Correct a
-  past mistake with a *new* entry that supersedes the old one, and cross-
-  reference it — don't edit the old entry away.
-- **Never let the Spec and the Log's Rules Changelog drift.** A rule change
-  updates both, in th
+- **Never rewrite or delete Log history** — append-only; supersede instead.
+- **Never let the Spec and the Log's Rules Changelog drift** — a rule change
+  updates both, in the same run.
+- **Never invent results in the Log** — if the rubric wasn't fully run, say so.
+- **Don't bloat the Spec with task trivia** — rules generalize; details go in the
+  Log entry.
+
+---
+
+## Optional: automatic mode (hooks + CLAUDE.md)
+
+Only if the user wants the layer to run every iteration **without** typing
+`/eval`. This trades a small, constant token cost (a pointer loaded each session +
+occasional reminders) for hands-off operation. Enable with:
+
+```bash
+python <skill>/scripts/probe.py --automate --dir <project-root>
+```
+
+It does two things:
+- **`CLAUDE.md` pointer** — appended so every Claude Code session auto-loads the
+  instruction to read/update `.agent-eval/`.
+- **`SessionStart` + `Stop` hooks** (`hooks/agent_eval_hooks.py`) — SessionStart
+  injects the layer's status; Stop nudges the agent to log an iteration when code
+  changed but the Log didn't. The Stop nudge is loop-safe, never fires on
+  read-only turns, and is silenced with the env var `AGENT_EVAL_ENFORCE=off`.
+
+Turn it all back off (keeps `.agent-eval/` memory intact):
+
+```bash
+python <skill>/scripts/probe.py --disable --dir <project-root>
+```
+
+---
+
+## CLI (`scripts/probe.py`)
+
+Dependency-free (Python 3 standard library only).
+
+```bash
+# PRIMARY: install the /eval command (once; global = every project on this machine)
+python scripts/probe.py --install-command                       # global
+python scripts/probe.py --install-command --scope project --dir /path/to/project
+
+# Health report on a project's layer
+python scripts/probe.py --dir /path/to/project
+python scripts/probe.py --dir /path/to/project --json           # machine-readable
+python scripts/probe.py --dir /path/to/project --strict         # warnings -> exit 2
+
+# Scaffold .agent-eval/ files only (usually /eval does this for you)
+python scripts/probe.py --init --dir /path/to/project
+
+# OPTIONAL automatic mode on / off
+python scripts/probe.py --automate --dir /path/to/project
+python scripts/probe.py --disable  --dir /path/to/project
+```
+
+The probe verifies both files exist, checks required sections, counts iteration
+entries, reports the last entry date and open-backlog count, and flags Spec ↔
+Changelog version drift. Exit `0` healthy, `1` missing structure, `2` warnings
+under `--strict`.
+
+---
+
+## Files in this skill
+
+- `commands/eval.md` — the `/eval` slash command (the manual trigger).
+- `templates/SPEC.template.md` — starting point for a project's `SPEC.md`.
+- `templates/EVALUATION_LOG.template.md` — starting point for `EVALUATION_LOG.md`.
+- `templates/CLAUDE.snippet.md` — the CLAUDE.md pointer used by automatic mode.
+- `reference/rubric.md` — a domain-agnostic rubric menu to build a project's rubric from.
+- `scripts/probe.py` — installer (`--install-command`), scaffolder (`--init`),
+  health check, and automatic-mode on/off (`--automate` / `--disable`).
+- `hooks/agent_eval_hooks.py` + `hooks/settings.hooks.example.json` — the optional
+  SessionStart/Stop hooks and reference config.

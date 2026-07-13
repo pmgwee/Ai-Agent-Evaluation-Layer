@@ -1,86 +1,53 @@
 # Ai-Agent-Evaluation-Layer
 
 A universal **Claude skill** that adds a self-improving *evaluation & iteration-
-refinement layer* to any agent-built project. Drop it into any repo and every
-iteration compounds in quality instead of resetting each session — enhancements,
-fixes, new rules, rubrics, regulations, and real user feedback are captured the
-moment they happen and carried across sessions **and across different AI agents**.
+refinement memory* to any agent-built project. You trigger it **manually** with
+the **`/eval`** command whenever you want to record something — a bug fix, a
+version enhancement, a new rule — and it writes that into durable memory that
+survives across sessions **and across different AI agents**. It does **not** run
+in the background.
 
-一个通用的 **Claude 技能**，为任何由 AI 构建的项目加上一个会自我进化的
-**「评估 + 迭代精炼」层**。放进任意仓库后，每一次迭代都会让系统质量不断累积，而不是
-每个会话都从零开始——增强、修复、新规则、评分标准（rubric）、规范、真实用户反馈都会
-在发生的当下被记录，并在不同会话、不同 AI agent 之间传承。
-
----
-
-## Why / 为什么需要它
-
-Agents forget. A new session — or a different agent — starts cold and loses the
-rules you agreed on, the defects you already fixed, and the feedback you already
-gave. This layer makes memory a committed part of the repo, so quality only goes
-up.
-
-Agent 会遗忘。新会话或换一个 agent 就会「冷启动」，丢掉你们约定的规则、已经修过的
-缺陷、已经给过的反馈。这个层把「记忆」变成仓库里被提交的一部分，让质量只增不减。
+一个通用的 **Claude 技能**，为任何由 AI 构建的项目加上一层会自我进化的
+**「评估 + 迭代精炼」记忆**。你用 **`/eval`** 命令**手动**触发它——想记录什么就记录
+（修了某个 bug、某个版本的增强、一条新规则），它就把这些写进能跨会话、跨不同 AI agent
+存续的持久记忆里。它**不会在后台运行**。
 
 ---
 
-## What it gives each project / 它给每个项目带来什么
+## How it works / 工作方式
 
-Inside any project, the skill maintains a committed memory folder:
+You run `/eval` at the moments you choose:
+
+- **First run in a project** → it sets up the layer (creates `.agent-eval/`).
+- **Later runs** → `/eval fixed the rate-limit retry bug`, `/eval v2: added Stripe
+  checkout`, `/eval add "never log secrets" as a rule` → it records that into
+  memory and commits.
+
+你在你选择的时刻运行 `/eval`：**第一次**在某项目运行 → 它会建立评估层
+（创建 `.agent-eval/`）；**之后每次** → `/eval 修好了限流重试的 bug`、
+`/eval v2：加了 Stripe 结账`、`/eval 把「日志里绝不写密钥」加成一条规则` → 它就把
+这条记进记忆并提交。
+
+Between runs, nothing happens and no tokens are spent. / 两次运行之间什么都不发生，
+也不消耗 token。
+
+---
+
+## What each project gets / 每个项目会得到什么
 
 ```
 <project>/.agent-eval/
-├── SPEC.md            # the living rules, rubrics & regulations (versioned)
+├── SPEC.md            # living rules, rubrics & regulations (versioned)
 └── EVALUATION_LOG.md  # append-only memory: feedback, defects, lessons, backlog
 ```
 
-- **SPEC.md** answers *"what are the rules right now?"* — versioned.
-- **EVALUATION_LOG.md** answers *"why is that a rule, what broke, what did we
-  learn, what's next?"* — append-only and searchable.
+- **SPEC.md** — *"what are the rules right now?"* (versioned)
+- **EVALUATION_LOG.md** — *"why is that a rule, what broke, what did we learn,
+  what's next?"* (append-only, searchable)
 
-Together they **are** the system's persistent memory. In a git repo they're
-committed, so `git pull` restores full context on any machine, in any session,
-for any agent.
-
----
-
-## The loop / 迭代循环
-
-On every task, the agent: **1)** loads the Spec + recent log, **2)** does the
-work per the rules, **3)** runs the Self-Review Rubric, **4)** captures user
-feedback near-verbatim, **5)** does an *advisory pass* where the system reviews
-itself for latent defects and next improvements, **6)** appends a dated
-Iteration Log entry (and bumps the Spec if a rule changed), **7)** commits
-`.agent-eval/`.
-
-每次任务，agent 会：**1)** 读 Spec + 最近记录，**2)** 按规则做事，**3)** 跑自评
-rubric，**4)** 近乎逐字记录用户反馈，**5)** 做一次「系统自审」发现潜在缺陷与下一步
-改进，**6)** 追加一条带日期的迭代记录（规则变了就更新 Spec 版本），**7)** 提交
-`.agent-eval/`。
-
----
-
-## Does it run by itself? / 会自动运行吗？
-
-Install and init are **one-time** per project — you don't re-trigger it each
-feature. But skills are *model-invoked*, so to make the loop fire **reliably**
-every iteration the layer wires itself into the project two ways:
-
-- a **`CLAUDE.md` pointer** (auto-loaded every session), and
-- **`SessionStart` + `Stop` hooks** (deterministic; the Stop hook nudges the
-  agent to log an iteration when code changed but the log didn't).
-
-`--init --with-hooks` sets both up. After that, just develop normally and the
-memory is written progress-by-progress. Silence the Stop nudge anytime with
-`AGENT_EVAL_ENFORCE=off`.
-
-安装和初始化对每个项目只需**一次**，不用每个功能都手动触发。但由于技能是*模型自行
-调用*的，为了让循环**稳定**在每次迭代触发，评估层会用两种方式接入项目：一段
-**`CLAUDE.md` 指引**（每个会话自动加载），以及 **`SessionStart` + `Stop` 钩子**
-（确定性执行；当有代码改动却没更新日志时，Stop 钩子会提醒 agent 记录本次迭代）。
-`--init --with-hooks` 会一次装好两者。之后正常开发即可，记忆会一步步写入。想关闭
-Stop 提醒，设 `AGENT_EVAL_ENFORCE=off`。
+Committed to the repo, so `git pull` restores full context on any machine, in any
+session, for any agent. / 提交进仓库，因此 `git pull` 就能在任何机器、任何会话、任何
+agent 上恢复完整上下文。
 
 ---
 
@@ -96,32 +63,92 @@ Help me install the agent-evaluation-layer skill:
 https://raw.githubusercontent.com/pmgwee/Ai-Agent-Evaluation-Layer/main/docs/install.md
 ```
 
-`docs/install.md` is written **for the agent to read**: it asks two questions
-(global vs. project? which project gets the layer?), checks prerequisites,
-clones/downloads, copies the skill into `.claude/skills/`, runs `probe.py --init`,
-then reports the real output.
-
-`docs/install.md` 是**写给 agent 读**的安装手册：先问两个问题（全局还是单项目？给哪个
-项目初始化评估层？）→ 检查前置条件 → clone/下载 → 复制到 `.claude/skills/` →
-跑 `probe.py --init` → 汇报真实输出。
+`docs/install.md` is written for the agent to read: it copies the skill into
+`.claude/skills/`, installs the `/eval` command, and tells you how to use it.
+`docs/install.md` 是写给 agent 读的：它会把技能复制到 `.claude/skills/`、安装 `/eval`
+命令，并告诉你怎么用。
 
 ### Option B — manual / 方案 B：手动安装
 
 ```bash
 git clone https://github.com/pmgwee/Ai-Agent-Evaluation-Layer.git
-# Global:  copy the skill folder to ~/.claude/skills/
+# 1) copy the skill (global = all projects on this machine)
 cp -R Ai-Agent-Evaluation-Layer/skills/agent-evaluation-layer ~/.claude/skills/
-# Project: copy it to <project>/.claude/skills/ instead
+# 2) install the /eval command (global)
+python3 ~/.claude/skills/agent-evaluation-layer/scripts/probe.py --install-command
 ```
 
-Then initialize a project's memory folder **and** wire it to run automatically
-(creates `.agent-eval/`, appends the `CLAUDE.md` pointer, installs the hooks):
-
-```bash
-python3 ~/.claude/skills/agent-evaluation-layer/scripts/probe.py --init --with-hooks --dir /path/to/project
-```
-
-Or on Windows PowerShell:
+Windows PowerShell:
 
 ```powershell
-New-Item -ItemType Directory -Force -Path "$HOME\.claude\skills
+New-Item -ItemType Directory -Force -Path "$HOME\.claude\skills" | Out-Null
+Copy-Item -Recurse -Force ".\Ai-Agent-Evaluation-Layer\skills\agent-evaluation-layer" "$HOME\.claude\skills\"
+python "$HOME\.claude\skills\agent-evaluation-layer\scripts\probe.py" --install-command
+```
+
+Then, in any project, just type **`/eval`**. That's it. / 然后在任何项目里输入
+**`/eval`** 即可。就这么简单。
+
+---
+
+## Optional: automatic mode / 可选：自动模式
+
+If you'd rather the layer run on **every** iteration without typing `/eval`, turn
+on automatic mode (adds a `CLAUDE.md` pointer + `SessionStart`/`Stop` hooks). This
+costs a little extra token overhead per session. / 如果你希望它在**每次**迭代都自动
+运行、不用输入 `/eval`，可开启自动模式（会加一段 `CLAUDE.md` 指引 +
+`SessionStart`/`Stop` 钩子）。这会带来少量每会话的 token 开销。
+
+```bash
+python3 <skill>/scripts/probe.py --automate --dir /path/to/project   # turn on
+python3 <skill>/scripts/probe.py --disable  --dir /path/to/project   # turn off
+```
+
+The Stop reminder can also be silenced anytime with `AGENT_EVAL_ENFORCE=off`.
+Stop 提醒也可随时用 `AGENT_EVAL_ENFORCE=off` 关闭。
+
+---
+
+## Health check / 健康检查
+
+```bash
+python3 <skill>/scripts/probe.py --dir /path/to/project           # human report
+python3 <skill>/scripts/probe.py --dir /path/to/project --json    # machine-readable
+python3 <skill>/scripts/probe.py --dir /path/to/project --strict  # warnings -> exit 2
+```
+
+No `pip install` needed. / 无需 `pip install`。
+
+---
+
+## Repository layout / 仓库结构
+
+```
+Ai-Agent-Evaluation-Layer/
+├── README.md
+├── LICENSE
+├── docs/
+│   └── install.md                         # agent-readable install manual (bilingual)
+└── skills/
+    └── agent-evaluation-layer/
+        ├── SKILL.md                        # the method (manual by default)
+        ├── commands/
+        │   └── eval.md                     # the /eval slash command (manual trigger)
+        ├── templates/
+        │   ├── SPEC.template.md
+        │   ├── EVALUATION_LOG.template.md
+        │   └── CLAUDE.snippet.md           # pointer used by optional automatic mode
+        ├── reference/
+        │   └── rubric.md                   # rubric menu
+        ├── hooks/                          # optional automatic mode
+        │   ├── agent_eval_hooks.py
+        │   └── settings.hooks.example.json
+        └── scripts/
+            └── probe.py                    # installer / health check / automate / disable
+```
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).
