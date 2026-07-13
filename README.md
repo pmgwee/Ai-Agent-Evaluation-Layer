@@ -18,14 +18,12 @@ does can affect your coding agent's behavior.
 
 ## How it works
 
-You run `/agent-evaluation-layer` at the moments you choose:
+You run `/agent-evaluation-layer` when you choose:
 
-- **First run in a project** → it sets up the layer (creates
-  `.agent-eval/EVALUATION_LOG.md`).
-- **Later runs** → `/agent-evaluation-layer fixed the rate-limit retry bug`, `/agent-evaluation-layer v2: added Stripe
-  checkout` → it appends a dated entry and commits.
+- **First run** → creates `.agent-eval/EVALUATION_LOG.md`.
+- **Later runs** → e.g. `/agent-evaluation-layer fixed the rate-limit retry bug` → appends a dated entry and commits.
 
-Between runs, nothing happens and no tokens are spent.
+Between runs: nothing happens, no tokens spent.
 
 ---
 
@@ -42,67 +40,38 @@ Between runs, nothing happens and no tokens are spent.
 
 ---
 
-## Important: the log is read back manually, too
+## Important: the log is read back manually
 
-Because this layer injects nothing into sessions, the log **does not automatically
-feed future agents**. A later Claude Code session won't know the log exists or read
-it on its own — unless you either:
+The layer injects nothing, so a **future session won't auto-read** the log. Make it
+kick in one of two ways:
 
-- **(a)** tell it in the moment — *"check `.agent-eval/EVALUATION_LOG.md` first"*, or
-- **(b)** add one line to your **own** `CLAUDE.md`, e.g. *"Before debugging, check
-  `.agent-eval/EVALUATION_LOG.md` for related past incidents."*
+- **(a)** point an agent at it in the moment — *"check `.agent-eval/EVALUATION_LOG.md` first"*, or
+- **(b)** add one line to **your own** `CLAUDE.md`, e.g. *"Before debugging, check `.agent-eval/EVALUATION_LOG.md` for past incidents."*
 
-Option **(b)** is *you* writing into *your own* rules doc — not the skill injecting
-anything — so it keeps the zero-touch safety while making the "future agents don't
-repeat past mistakes" value actually kick in. **Recommended.** Without one of these,
-the log only helps when you manually look back or manually point an agent at it.
+**(b)** is *you* writing in *your* doc (not the skill injecting anything) — it
+keeps the zero-touch safety while making the log actually useful. **Recommended.**
 
 ---
 
-## When to run `/agent-evaluation-layer` — a practical guide
+## When to run `/agent-evaluation-layer`
 
-### 1. Log everything meaningful; keep current rules in your own docs
+**Judge by reusable lesson, not size.** Log it if it could recur elsewhere, has a
+non-obvious root cause, or would bite a future agent again. A small fix can earn a
+rule; a big ship can earn nothing. Pure one-off trivia (a typo) can stay in the
+commit message.
 
-Every `/agent-evaluation-layer` run appends an entry to `EVALUATION_LOG.md`. Whether a lesson *also*
-earns a durable **rule** comes down to one test the agent applies each time: **is
-this durable** — will it recur elsewhere, does it have a non-obvious root cause,
-would skipping it let the same defect happen again? If yes, you record the rule in
-your project's own docs (e.g. `CLAUDE.md`) and the log keeps a dated pointer to it.
-If it's a one-off detail with no reusable lesson, it stays in the Log entry only.
+**Run at checkpoints, not mid-flow.** Don't decide "is this worth logging?" every
+fix — let changes accumulate, then run it once at a checkpoint (below). No
+argument? It diffs `git log`/`git diff` since the last entry and surfaces what
+changed.
 
-This is a judgment the agent makes each run by following the skill's method, not a
-deterministic classifier — but the method is designed so you don't have to
-pre-decide "is this rule-worthy?" yourself. A "small" fix can absolutely earn a
-rule (e.g. a currency-formatting inconsistency traced to an environment-dependent
-ICU bug is exactly the kind of small-diff, high-durability lesson worth a rule); a
-"big" feature ship might add nothing if nothing about it generalizes.
+**One entry per lesson, not per session.** Two unrelated defects = two entries
+(easier to search later), not one merged blob.
 
-### 2. The checkpoint concept — defer the judgment, don't make it mid-flow
-
-You don't need to stop and decide, the moment you fix something small, whether
-it's "worth" logging. Let changes accumulate. At a natural checkpoint — before
-switching sessions, or when a phase is genuinely implemented **and tested and
-confirmed done** — run `/agent-evaluation-layer` once with no argument. It scans `git log` /
-`git diff` since the last entry and surfaces everything that happened since; the
-what-to-log judgment happens *then*, not while you're heads-down coding.
-
-### 3. One entry per lesson, not one entry per session
-
-When a checkpoint sweeps up several independent, reproducible lessons, don't
-compress them into a single entry. If you fixed two unrelated defects in the same
-session and each teaches a distinct lesson, record **two** separate Iteration Log
-entries (run `/agent-evaluation-layer` twice, or ask for two entries in one pass) — not one entry
-that mixes both. A merged entry is much harder to find later by date, keyword, or
-tag.
-
-### 4. Good checkpoint triggers
-
-- Before switching to a new session, or handing off to a different agent.
-- After a phase is implemented **and tested and confirmed done** — not just
-  "code written."
-- Right after any independent, reproducible lesson — don't wait for the whole
-  session to end before logging it; logging it immediately keeps entries small
-  and searchable.
+**Good checkpoint triggers:**
+- before switching sessions / handing off to another agent
+- after a phase is implemented **and tested and confirmed done**
+- right after any independent, reproducible lesson
 
 ---
 
@@ -123,27 +92,22 @@ current rules those docs already hold.
 
 ## Install
 
-### Option A (recommended) — one prompt
+Install = copy one folder into `.claude/skills/`. The skill runs by its **folder
+name** (`/agent-evaluation-layer`), so there is **no command file and nothing goes
+into `.claude/commands/`**. (Global `~/.claude/skills/` = all projects; project
+`<project>/.claude/skills/` = one repo.)
 
-Paste this to your agent (Claude Code, Cursor, etc.):
+**Option A — one prompt** (paste to your agent):
 
 ```
 Help me install the agent-evaluation-layer skill:
 https://raw.githubusercontent.com/pmgwee/Ai-Agent-Evaluation-Layer/main/docs/install.md
 ```
 
-`docs/install.md` is written for the agent to read: it copies the skill folder
-into `.claude/skills/agent-evaluation-layer/` and tells you how to use it. Nothing else is added.
-
-### Option B — manual
-
-Installing is just copying one folder. The skill is invoked by its **folder name**
-(`agent-evaluation-layer`), so there is **no command file and nothing goes into
-`.claude/commands/`**.
+**Option B — manual:**
 
 ```bash
 git clone https://github.com/pmgwee/Ai-Agent-Evaluation-Layer.git
-# copy the skill folder into place (global = all projects on this machine)
 cp -R Ai-Agent-Evaluation-Layer/skills/agent-evaluation-layer ~/.claude/skills/
 ```
 
@@ -154,8 +118,7 @@ New-Item -ItemType Directory -Force -Path "$HOME\.claude\skills" | Out-Null
 Copy-Item -Recurse -Force ".\Ai-Agent-Evaluation-Layer\skills\agent-evaluation-layer" "$HOME\.claude\skills\"
 ```
 
-Then, in any project, just type **`/agent-evaluation-layer`**. That's it. (For one repo only, copy
-into `<project>/.claude/skills/agent-evaluation-layer/` instead.)
+Then type **`/agent-evaluation-layer`** in any project.
 
 ---
 
@@ -175,20 +138,14 @@ No `pip install` needed.
 
 ```
 Ai-Agent-Evaluation-Layer/
-├── README.md                                # this file (English)
-├── README.zh-CN.md                          # Chinese translation
-├── LICENSE
-├── docs/
-│   └── install.md                           # agent-readable install manual (bilingual)
-└── skills/
-    └── agent-evaluation-layer/               # drop into .claude/skills/; invoke as /agent-evaluation-layer
-        ├── SKILL.md                          # the method (manual; one file, no rules file, no hooks)
-        ├── templates/
-        │   └── EVALUATION_LOG.template.md    # starting point for a project's log
-        ├── reference/
-        │   └── rubric.md                     # optional eval-time review lens
-        └── scripts/
-            └── probe.py                      # scaffolder / health check (installs nothing)
+├── README.md · README.zh-CN.md   # docs (EN / CN)
+├── LICENSE                        # MIT
+├── docs/install.md                # agent-readable install manual
+└── skills/agent-evaluation-layer/
+    ├── SKILL.md                   # the method — invoked as /agent-evaluation-layer
+    ├── templates/EVALUATION_LOG.template.md   # starting point for a project's log
+    ├── reference/rubric.md        # optional eval-time review lens
+    └── scripts/probe.py           # scaffolder + health check (installs nothing)
 ```
 
 ---

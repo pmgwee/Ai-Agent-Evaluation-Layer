@@ -17,9 +17,8 @@
 
 你在你选择的时刻运行 `/agent-evaluation-layer`：
 
-- **第一次**在某项目运行 → 它会建立评估层（创建 `.agent-eval/EVALUATION_LOG.md`）。
-- **之后每次** → `/agent-evaluation-layer 修好了限流重试的 bug`、`/agent-evaluation-layer v2：加了 Stripe 结账` → 它就
-  追加一条带日期的记录并提交。
+- **第一次** → 创建 `.agent-eval/EVALUATION_LOG.md`。
+- **之后每次** → 例:`/agent-evaluation-layer 修好了限流重试的 bug` → 追加一条带日期的记录并提交。
 
 两次运行之间什么都不发生，也不消耗 token。
 
@@ -38,57 +37,27 @@
 
 ## 重要:log 的「读回」也是手动的
 
-因为这个评估层不往任何 session 注入内容,所以这个 log **不会自动喂给未来的 agent**。
-之后某个 Claude Code session 不会自动知道它存在、也不会自动去读它——除非你:
+评估层不注入任何东西,所以**未来的 session 不会自动去读**这个 log。让它发挥作用,二选一:
 
-- **(a)** 当下叫它:*「先看一下 `.agent-eval/EVALUATION_LOG.md`」*,或者
-- **(b)** 在**你自己的** `CLAUDE.md` 里加一句,例如:*「debug 前先查
-  `.agent-eval/EVALUATION_LOG.md` 里有没有相关的历史事故。」*
+- **(a)** 当下叫它:*「先看一下 `.agent-eval/EVALUATION_LOG.md`」*,或
+- **(b)** 在**你自己的** `CLAUDE.md` 里加一句,例:*「debug 前先查 `.agent-eval/EVALUATION_LOG.md` 里的历史事故。」*
 
-**(b)** 是**你自己**写进**你自己**的规则文件,不是 skill 替你注入——既守住「零侵入」
-的安全,又让「未来 agent 不重复过去的错」这个价值真正生效。**推荐加上这一句。**
-否则这个 log 只在你手动回查、或手动叫 agent 去读的时候才有用。
+**(b)** 是**你自己**写进**你自己**的规则文件(不是 skill 替你注入),既守住零侵入、又让 log 真正有用。**推荐。**
 
 ---
 
-## 什么时候该跑 `/agent-evaluation-layer` —— 实用指南
+## 什么时候该跑 `/agent-evaluation-layer`
 
-### 1. 有意义的都记进 Log；当前规则留在你自己的文档里
+**按「可复用教训」判断,不按大小。** 可能复发、有不显而易见的根因、或未来 agent 会再踩——就记。小修复也能值得一条规则;大上线也可能什么都学不到。一次性琐事(打错字)留在 commit message 就好。
 
-每次跑 `/agent-evaluation-layer`，都会往 `EVALUATION_LOG.md` 追加一条记录。至于一个教训要不要**升级
-成一条持久规则**，取决于 agent 每次都会套用的同一个判断标准：**这件事有没有持久性**
-——会不会在别处复发、有没有不显而易见的根因、如果不记下来同样的问题会不会再犯？
-如果是，你就把这条规则写进你项目自己的文档（例如 `CLAUDE.md`），日志里只留一条
-指向它的带日期指针。如果只是一次性、没有可复用教训的细节，那就只留在这条 Log 记录里。
+**在检查点跑,不要边改边判断。** 别每改一处就停下来想「这值不值得记」——让改动累积,到一个检查点(见下)再跑一次。不带参数时它会用 `git log`/`git diff` 扫出自上次记录以来的所有改动。
 
-这是 agent 每次运行时按照这套方法**做出的判断**，不是一个绝对精确的自动分类器
-——但整套方法的设计目的，正是让你**不用自己**提前判断「这个够不够格变成规则」。
-一个「很小」的修复完全可能配得上一条规则（比如一次因为环境相关的 ICU 行为差异
-导致的货币格式不一致——diff 很小，但持久性很高）；反过来，一个「很大」的功能上线，
-如果里面没有任何可复用的通用道理，也可能什么规则都不加。
+**每条教训记一条,不是每个 session 一条。** 两个互不相关的缺陷 = 两条 entry(更好搜),不要揉成一坨。
 
-### 2. 检查点(checkpoint)的概念——把判断往后延，不用当下就做
-
-你不需要在修完一个小问题的当下，立刻停下来决定「这值不值得记」。让改动自然
-累积就好。等到一个自然的检查点——要切 session 了，或者一个 phase 真的做完、
-测完、确认完工了——再跑一次不带参数的 `/agent-evaluation-layer`。它会用 `git log` / `git diff`
-扫描上一条记录之后发生的所有事；「记什么」的判断是在**那个时候**才做，而不是要求
-你在埋头写代码的过程中分心去想。
-
-### 3. 每条「独立可复现的教训」记一条 entry，不是每个 session 记一条
-
-如果一个检查点一次扫出好几件互不相关、各自都有独立教训的事，不要把它们压缩进
-同一条 entry。如果同一个 session 里你修了两个互不相关的缺陷、各自都教会你一件
-不同的事，就应该记成**两条**独立的 Iteration Log entry（跑两次 `/agent-evaluation-layer`，或者
-一次要求拆成两条）——而不是揉成一条。合并起来的 entry，以后靠日期、关键词、
-标签去搜索时会很难精准定位。
-
-### 4. 值得触发一次 `/agent-evaluation-layer` 的检查点
-
-- 要切换到新 session、或要把工作交给别的 agent 之前。
-- 一个 phase **真正实现、测试完、确认完工**之后——不是「代码写完」就算。
-- 任何一件独立、可复现的教训发生之后立刻记——不要攒到整个 session 结束才一次性
-  倒出来；随手记能让每条 entry 保持精简、好搜索。
+**好的检查点:**
+- 切换 session / 交接给别的 agent 之前
+- 一个 phase **真正实现、测试完、确认完工**之后
+- 任何独立、可复现的教训发生之后立刻记
 
 ---
 
@@ -107,38 +76,30 @@
 
 ## 安装
 
-### 方案 A（推荐）：一句话安装
+安装 = 把一个文件夹复制进 `.claude/skills/`。skill 靠**文件夹名**(`/agent-evaluation-layer`)运行,所以**没有 command 文件、`.claude/commands/` 里什么都不会多**。(全局 `~/.claude/skills/` = 所有项目;项目 `<project>/.claude/skills/` = 单个 repo。)
 
-把下面这句贴给你的 agent（Claude Code、Cursor 等）：
+**方案 A — 一句话**(贴给你的 agent):
 
 ```
 Help me install the agent-evaluation-layer skill:
 https://raw.githubusercontent.com/pmgwee/Ai-Agent-Evaluation-Layer/main/docs/install.md
 ```
 
-`docs/install.md` 是写给 agent 读的：它会把技能文件夹复制到 `.claude/skills/agent-evaluation-layer/`、
-并告诉你怎么用。不会多加任何别的东西。
-
-### 方案 B：手动安装
-
-安装就是复制一个文件夹。skill 靠**文件夹名**（`agent-evaluation-layer`）触发，所以
-**没有 command 文件、`.claude/commands/` 里什么都不会多**。
+**方案 B — 手动:**
 
 ```bash
 git clone https://github.com/pmgwee/Ai-Agent-Evaluation-Layer.git
-# 把 skill 文件夹复制到位（全局 = 这台机器上所有项目都能用）
 cp -R Ai-Agent-Evaluation-Layer/skills/agent-evaluation-layer ~/.claude/skills/
 ```
 
-Windows PowerShell：
+Windows PowerShell:
 
 ```powershell
 New-Item -ItemType Directory -Force -Path "$HOME\.claude\skills" | Out-Null
 Copy-Item -Recurse -Force ".\Ai-Agent-Evaluation-Layer\skills\agent-evaluation-layer" "$HOME\.claude\skills\"
 ```
 
-然后在任何项目里输入 **`/agent-evaluation-layer`** 即可。就这么简单。（只想绑单个 repo,就复制到
-`<project>/.claude/skills/agent-evaluation-layer/`。）
+然后在任何项目里输入 **`/agent-evaluation-layer`** 即可。
 
 ---
 
@@ -158,20 +119,14 @@ python3 <skill>/scripts/probe.py --dir /path/to/project --strict  # 有警告则
 
 ```
 Ai-Agent-Evaluation-Layer/
-├── README.md                                # 英文版
-├── README.zh-CN.md                          # 中文翻译（本文件）
-├── LICENSE
-├── docs/
-│   └── install.md                           # 给 agent 读的安装手册（双语）
-└── skills/
-    └── agent-evaluation-layer/               # 放进 .claude/skills/，用 /agent-evaluation-layer 触发
-        ├── SKILL.md                          # 方法本体（手动；单文件、无规则文件、无 hook）
-        ├── templates/
-        │   └── EVALUATION_LOG.template.md    # 项目日志的起始模板
-        ├── reference/
-        │   └── rubric.md                     # 可选的 eval 时自查清单
-        └── scripts/
-            └── probe.py                      # 脚手架 / 健康检查（不安装任何东西）
+├── README.md · README.zh-CN.md   # 文档（英 / 中）
+├── LICENSE                        # MIT
+├── docs/install.md                # 给 agent 读的安装手册
+└── skills/agent-evaluation-layer/
+    ├── SKILL.md                   # 方法本体 —— 用 /agent-evaluation-layer 触发
+    ├── templates/EVALUATION_LOG.template.md   # 项目日志的起始模板
+    ├── reference/rubric.md        # 可选的 eval 时自查清单
+    └── scripts/probe.py           # 脚手架 + 健康检查（不安装任何东西）
 ```
 
 ---
